@@ -1,7 +1,10 @@
 import json
 import os
+from dotenv import load_dotenv
 from app.agents.prompts import STATISTICAL_INTENT_PROMPT
 from groq import Groq
+
+load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
