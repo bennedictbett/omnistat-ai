@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes import analytics, agent
 
 app = FastAPI(
     title="OmniStat AI",
@@ -15,6 +16,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(
+    analytics.router,
+    prefix="/api/analytics",
+    tags=["Analytics"]
+)
+
+app.include_router(
+    agent.router,
+    prefix="/api/agent",
+    tags=["Agent"]
+)
+
 @app.get("/")
 def root():
-    return {"status": "OmniStat AI is running"}
+    return {
+        "status": "OmniStat AI is running",
+        "version": "1.0.0",
+        "endpoints": {
+            "analytics": "/api/analytics",
+            "agent": "/api/agent",
+            "docs": "/docs"
+        }
+    }
