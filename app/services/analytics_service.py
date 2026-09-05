@@ -29,7 +29,7 @@ class AnalyticsService:
             "test": "shapiro_wilk",
             "statistic": round(stat, 4),
             "p_value": round(p_value, 4),
-            "normal": p_value > 0.05,
+            "normal": bool(p_value > 0.05),
             "interpretation": (
                 "Data appears normally distributed (p > 0.05) — parametric tests are appropriate"
                 if p_value > 0.05
