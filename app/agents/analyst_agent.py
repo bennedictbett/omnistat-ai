@@ -26,10 +26,11 @@ class AnalystAgent:
         ]
 
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="groq/compound",
             messages=messages,
             temperature=0.1,
-            max_tokens=500
+            max_tokens=500,
+            response_format={"type": "json_object"}
         )
 
         raw = response.choices[0].message.content.strip()
