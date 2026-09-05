@@ -31,9 +31,9 @@ class AnalyticsService:
             "p_value": round(p_value, 4),
             "normal": bool(p_value > 0.05),
             "interpretation": (
-                "Data appears normally distributed (p > 0.05) — parametric tests are appropriate"
+                "Data appears normally distributed (p > 0.05) - parametric tests are appropriate"
                 if p_value > 0.05
-                else "Data is not normally distributed (p ≤ 0.05) — consider non-parametric tests"
+                else "Data is not normally distributed (p <= 0.05) - consider non-parametric tests"
             )
         }
 
