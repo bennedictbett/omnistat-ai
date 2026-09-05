@@ -6,9 +6,6 @@ import Header from '@/components/core/Header'
 import JarvisInput from '@/components/jarvis/JarvisInput'
 import FileUpload from '@/components/data/FileUpload'
 import NormalityTest from '@/components/analytics/NormalityTest'
-//import DataSummary from '@/components/data/DataSummary'
-//import NormalityTest from '@/components/analytics/NormalityTest'
-//import SurvivalCurve from '@/components/analytics/SurvivalCurve'
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
@@ -24,11 +21,6 @@ export default function Home() {
           {activeTab === 'upload' && (
             <FileUpload onUpload={setUploadedData} />
           )}
-          {activeTab === 'summary' && uploadedData && (
-            <DataSummary data={uploadedData} />
-          )}
-          {activeTab === 'normality' && <NormalityTest />}
-          {activeTab === 'survival' && <SurvivalCurve />}
           {activeTab === 'normality' && <NormalityTest />}
         </main>
       </div>
