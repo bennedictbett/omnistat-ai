@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Brain, Send, Loader2 } from 'lucide-react'
+import { Brain, Send, Loader2, Play } from 'lucide-react'
 
 interface JarvisIntent {
   test: string
@@ -17,15 +17,68 @@ interface JarvisResponse {
   error?: string
 }
 
+interface AnalysisResult {
+  [key: string]: any
+}
+
+const TEST_DESCRIPTIONS: Record<string, string> = {
+  paired_t_test: 'Comparing paired measurements before and after treatment',
+  independent_t_test: 'Comparing two independent groups',
+  repeated_measures_anova: 'Comparing multiple measurements across time',
+  one_way_anova: 'Comparing means across three or more groups',
+  kaplan_meier: 'Estimating survival probability over time',
+  cox_regression: 'Modeling survival with covariates',
+  shapiro_wilk: 'Testing whether data follows normal distribution',
+  pearson_correlation: 'Measuring linear relationship between variables',
+  spearman_correlation: 'Measuring monotonic relationship between variables',
+  mann_whitney: 'Non-parametric comparison of two groups',
+  kruskal_wallis: 'Non-parametric comparison of multiple groups',
+}
+
+const SAMPLE_DATA: Record<string, any> = {
+  normality: {
+    values: [2.3, 3.1, 2.8, 3.5, 2.9, 3.2, 2.7, 3.0, 2.6, 3.3]
+  },
+  survival: {
+    durations: [5, 10, 15, 20, 25, 30, 35, 40],
+    event_observed: [1, 1, 0, 1, 0, 1, 1, 0],
+    label: 'Treatment Group'
+  }
+}
+
+function getEndpointForTest(test: string): { url: string; body: any } | null {
+  const normalityTests = ['shapiro_wilk', 'normality_test', 'anderson_darling', 'kolmogorov_smirnov']
+  const survivalTests = ['kaplan_meier', 'cox_regression', 'survival_analysis']
+
+  if (normalityTests.some(t => test.toLowerCase().includes(t.replace('_', '')))) {
+    return {
+      url: 'http://127.0.0.1:8000/api/analytics/normality',
+      body: SAMPLE_DATA.normality
+    }
+  }
+
+  if (survivalTests.some(t => test.toLowerCase().includes(t.replace('_', '')))) {
+    return {
+      url: 'http://127.0.0.1:8000/api/analytics/survival',
+      body: SAMPLE_DATA.survival
+    }
+  }
+
+  return null
+}
+
 export default function JarvisInput() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [running, setRunning] = useState(false)
   const [response, setResponse] = useState<JarvisResponse | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
 
   const handleSubmit = async () => {
     if (!query.trim()) return
     setLoading(true)
     setResponse(null)
+    setAnalysisResult(null)
 
     try {
       const res = await fetch('http://127.0.0.1:8000/api/agent/query', {
@@ -39,6 +92,37 @@ export default function JarvisInput() {
       setResponse({ success: false, error: 'Failed to connect to API' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRunAnalysis = async () => {
+    if (!response?.intent) return
+    setRunning(true)
+    setAnalysisResult(null)
+
+    const endpoint = getEndpointForTest(response.intent.test)
+
+    if (!endpoint) {
+      setAnalysisResult({
+        message: `Analysis type "${response.intent.test}" requires data upload first.`,
+        hint: 'Go to Upload Data, upload your clinical file, then run this analysis.'
+      })
+      setRunning(false)
+      return
+    }
+
+    try {
+      const res = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(endpoint.body)
+      })
+      const data = await res.json()
+      setAnalysisResult(data)
+    } catch {
+      setAnalysisResult({ error: 'Failed to run analysis' })
+    } finally {
+      setRunning(false)
     }
   }
 
@@ -92,7 +176,7 @@ export default function JarvisInput() {
         </button>
       </div>
 
-      {/* Response */}
+      {/* Intent Response */}
       {response && (
         <div className={`rounded-lg border p-5 space-y-4 ${
           response.success
@@ -101,9 +185,22 @@ export default function JarvisInput() {
         }`}>
           {response.success && response.intent ? (
             <>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-sm font-medium text-green-400">Analysis Ready</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-sm font-medium text-green-400">Analysis Ready</span>
+                </div>
+                <button
+                  onClick={handleRunAnalysis}
+                  disabled={running}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-all"
+                >
+                  {running
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <Play size={14} />
+                  }
+                  {running ? 'Running...' : 'Run Analysis'}
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -120,6 +217,12 @@ export default function JarvisInput() {
                   </p>
                 </div>
               </div>
+
+              {TEST_DESCRIPTIONS[response.intent.test] && (
+                <p className="text-xs text-gray-400 italic">
+                  {TEST_DESCRIPTIONS[response.intent.test]}
+                </p>
+              )}
 
               <div>
                 <p className="text-xs text-gray-500 mb-2">Variables Required</p>
@@ -145,6 +248,33 @@ export default function JarvisInput() {
             </>
           ) : (
             <p className="text-sm text-red-400">{response.error}</p>
+          )}
+        </div>
+      )}
+
+      {/* Analysis Result */}
+      {analysisResult && (
+        <div className="rounded-lg border border-blue-500/20 bg-gray-900 p-5 space-y-3">
+          <p className="text-sm font-medium text-blue-400">Analysis Results</p>
+
+          {analysisResult.message ? (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-300">{analysisResult.message}</p>
+              {analysisResult.hint && (
+                <p className="text-xs text-gray-500">{analysisResult.hint}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(analysisResult).map(([key, value]) => (
+                <div key={key} className="flex justify-between items-start py-2 border-b border-gray-800 last:border-0">
+                  <span className="text-xs text-gray-500 font-mono">{key}</span>
+                  <span className="text-xs text-white font-mono text-right max-w-xs truncate">
+                    {typeof value === 'object' ? JSON.stringify(value).slice(0, 60) + '...' : String(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
