@@ -47,17 +47,19 @@ const SAMPLE_DATA: Record<string, any> = {
 }
 
 function getEndpointForTest(test: string): { url: string; body: any } | null {
-  const normalityTests = ['shapiro_wilk', 'normality_test', 'anderson_darling', 'kolmogorov_smirnov']
-  const survivalTests = ['kaplan_meier', 'cox_regression', 'survival_analysis']
+  const t = test.toLowerCase()
 
-  if (normalityTests.some(t => test.toLowerCase().includes(t.replace('_', '')))) {
+  const normalityTests = ['shapiro', 'normality', 'anderson', 'kolmogorov', 'lilliefors', 'jarque']
+  const survivalTests = ['kaplan', 'survival', 'cox', 'competing']
+
+  if (normalityTests.some(keyword => t.includes(keyword))) {
     return {
       url: 'http://127.0.0.1:8000/api/analytics/normality',
       body: SAMPLE_DATA.normality
     }
   }
 
-  if (survivalTests.some(t => test.toLowerCase().includes(t.replace('_', '')))) {
+  if (survivalTests.some(keyword => t.includes(keyword))) {
     return {
       url: 'http://127.0.0.1:8000/api/analytics/survival',
       body: SAMPLE_DATA.survival
