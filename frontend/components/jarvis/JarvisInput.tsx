@@ -255,7 +255,7 @@ export default function JarvisInput() {
         </div>
       )}
 
-      {/* Analysis Result */}
+            {/* Analysis Result */}
       {analysisResult && (
         <div className="rounded-lg border border-blue-500/20 bg-gray-900 p-5 space-y-4">
           <p className="text-sm font-medium text-blue-400">Analysis Results</p>
@@ -268,31 +268,41 @@ export default function JarvisInput() {
               )}
             </div>
 
-          ) : analysisResult.statistic !== undefined ? (
+          ) : analysisResult.survival_probability ? (
             <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-800 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-white font-mono">{analysisResult.statistic}</p>
-                    <p className="text-xs text-gray-500 mt-1">W Statistic</p>
-                    </div>
-                    <div className="bg-gray-800 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-white font-mono">{analysisResult.p_value}</p>
-                    <p className="text-xs text-gray-500 mt-1">P-Value</p>
-                    </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-800 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{analysisResult.median_survival}</p>
+                  <p className="text-xs text-gray-500 mt-1">Median Survival</p>
                 </div>
-                <div className={`p-3 rounded-lg border ${
-                    analysisResult.normal
-                    ? 'bg-green-500/5 border-green-500/20'
-                    : 'bg-yellow-500/5 border-yellow-500/20'
-                }`}>
-                    <p className={`text-sm font-medium ${analysisResult.normal ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {analysisResult.normal ? '✓ Normally Distributed' : '✗ Not Normally Distributed'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">{analysisResult.interpretation}</p>
+                <div className="bg-gray-800 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{analysisResult.timeline.length}</p>
+                  <p className="text-xs text-gray-500 mt-1">Time Points</p>
                 </div>
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart
+                  data={analysisResult.timeline.map((t: number, i: number) => ({
+                    time: t,
+                    survival: parseFloat((analysisResult.survival_probability[i] * 100).toFixed(1))
+                  }))}
+                  margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="time" stroke="#6b7280" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#6b7280" tick={{ fontSize: 11 }} domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }}
+                    formatter={(value: any) => [`${value}%`, 'Survival']}
+                    labelFormatter={(label) => `Time: ${label}`}
+                  />
+                  <ReferenceLine y={50} stroke="#6b7280" strokeDasharray="4 4" />
+                  <Line type="stepAfter" dataKey="survival" stroke="#a78bfa" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
 
-          ) : analysisResult.test ? (
+          ) : analysisResult.statistic !== undefined ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-800 rounded-lg p-3 text-center">
