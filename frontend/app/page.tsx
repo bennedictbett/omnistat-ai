@@ -6,6 +6,7 @@ import Header from '@/components/core/Header'
 import JarvisInput from '@/components/jarvis/JarvisInput'
 import FileUpload from '@/components/data/FileUpload'
 import DataSummary from '@/components/data/DataSummary'
+import DescriptiveStats from '@/components/analytics/DescriptiveStats'
 import NormalityTest from '@/components/analytics/NormalityTest'
 import SurvivalCurve from '@/components/analytics/SurvivalCurve'
 
@@ -36,6 +37,7 @@ export default function Home() {
           {activeTab === 'summary' && <DataSummary data={uploadedData} />}
           {activeTab === 'normality' && <NormalityTest />}
           {activeTab === 'survival' && <SurvivalCurve />}
+          {activeTab === 'descriptive' && <DescriptiveStats />}
         </main>
       </div>
     </div>
