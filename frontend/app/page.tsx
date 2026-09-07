@@ -5,9 +5,9 @@ import Sidebar from '@/components/core/Sidebar'
 import Header from '@/components/core/Header'
 import JarvisInput from '@/components/jarvis/JarvisInput'
 import FileUpload from '@/components/data/FileUpload'
+import DataSummary from '@/components/data/DataSummary'
 import NormalityTest from '@/components/analytics/NormalityTest'
 import SurvivalCurve from '@/components/analytics/SurvivalCurve'
-
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
@@ -21,8 +21,12 @@ export default function Home() {
         <main className="flex-1 overflow-y-auto p-6">
           {activeTab === 'jarvis' && <JarvisInput />}
           {activeTab === 'upload' && (
-            <FileUpload onUpload={setUploadedData} />
+            <FileUpload onUpload={(data) => {
+              setUploadedData(data)
+              setActiveTab('summary')
+            }} />
           )}
+          {activeTab === 'summary' && <DataSummary data={uploadedData} />}
           {activeTab === 'normality' && <NormalityTest />}
           {activeTab === 'survival' && <SurvivalCurve />}
         </main>
