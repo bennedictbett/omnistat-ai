@@ -29,6 +29,7 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
       })
       const data = await res.json()
       setResult(data)
+      console.log('Upload complete, calling onUpload with:', data)
       onUpload(data)
     } catch {
       setError('Failed to upload file. Make sure the API is running.')
