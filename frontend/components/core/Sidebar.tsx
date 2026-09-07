@@ -9,6 +9,7 @@ const tabs = [
   { id: 'normality', label: 'Normality Test', icon: BarChart2 },
   { id: 'survival', label: 'Survival Curve', icon: Activity },
   { id: 'history', label: 'History', icon: FileText },
+  { id: 'descriptive', label: 'Descriptive Stats', icon: BarChart2 },
 ]
 
 interface SidebarProps {
