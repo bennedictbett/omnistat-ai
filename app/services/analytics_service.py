@@ -58,3 +58,30 @@ class AnalyticsService:
             "survival_probability": timeline[data.get("label", "Survival")].tolist(),
             "median_survival": kmf.median_survival_time_
         }
+
+    def descriptive_statistics(self, data: dict) -> dict:
+        """Compute descriptive statistics for a numeric column"""
+        import numpy as np
+        values = data.get("values", [])
+        column = data.get("column", "variable")
+        arr = np.array(values)
+
+        q1 = float(np.percentile(arr, 25))
+        q3 = float(np.percentile(arr, 75))
+
+        return {
+            "column": column,
+            "count": int(len(arr)),
+            "mean": round(float(np.mean(arr)), 4),
+            "median": round(float(np.median(arr)), 4),
+            "std": round(float(np.std(arr, ddof=1)), 4),
+            "variance": round(float(np.var(arr, ddof=1)), 4),
+            "min": round(float(np.min(arr)), 4),
+            "max": round(float(np.max(arr)), 4),
+            "q1": round(q1, 4),
+            "q3": round(q3, 4),
+            "iqr": round(q3 - q1, 4),
+            "range": round(float(np.max(arr) - np.min(arr)), 4),
+            "skewness": round(float(stats.skew(arr)), 4),
+            "kurtosis": round(float(stats.kurtosis(arr)), 4),
+        }
