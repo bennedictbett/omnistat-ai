@@ -24,3 +24,11 @@ async def survival_curve(data: dict):
     Body: { "durations": [...], "event_observed": [...], "label": "Group A" }
     """
     return service.kaplan_meier(data)
+
+@router.post("/descriptive")
+async def descriptive_stats(data: dict):
+    """
+    Run descriptive statistics on a list of values
+    Body: { "values": [...], "column": "blood_pressure" }
+    """
+    return service.descriptive_statistics(data)
