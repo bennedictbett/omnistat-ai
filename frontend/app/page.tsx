@@ -1,20 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Sidebar from '@/components/core/Sidebar'
 import Header from '@/components/core/Header'
-import JarvisInput from '@/components/jarvis/JarvisInput'
-import FileUpload from '@/components/data/FileUpload'
-import DataSummary from '@/components/data/DataSummary'
-import DescriptiveStats from '@/components/analytics/DescriptiveStats'
-import NormalityTest from '@/components/analytics/NormalityTest'
-import SurvivalCurve from '@/components/analytics/SurvivalCurve'
+
+const JarvisInput = dynamic(() => import('@/components/jarvis/JarvisInput'), { ssr: false })
+const FileUpload = dynamic(() => import('@/components/data/FileUpload'), { ssr: false })
+const DataSummary = dynamic(() => import('@/components/data/DataSummary'), { ssr: false })
+const NormalityTest = dynamic(() => import('@/components/analytics/NormalityTest'), { ssr: false })
+const SurvivalCurve = dynamic(() => import('@/components/analytics/SurvivalCurve'), { ssr: false })
+const DescriptiveStats = dynamic(() => import('@/components/analytics/DescriptiveStats'), { ssr: false })
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
   const [uploadedData, setUploadedData] = useState<any>(null)
 
-  // Load saved data on mount
   useEffect(() => {
     const saved = localStorage.getItem('omnistat_data')
     if (saved) setUploadedData(JSON.parse(saved))
