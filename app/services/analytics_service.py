@@ -6,18 +6,53 @@ class AnalyticsService:
     async def parse_file(self, file) -> dict:
         """Parse uploaded Excel or CSV clinical file"""
         content = await file.read()
-        
         if file.filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
         else:
             df = pd.read_excel(io.BytesIO(content))
+
+        # Get numeric and categorical columns
+        numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+
+        # Descriptive stats for all numeric columns
+        numeric_stats = {}
+        for col in numeric_cols:
+            numeric_stats[col] = {
+                "mean": round(float(df[col].mean()), 4),
+                "median": round(float(df[col].median()), 4),
+                "std": round(float(df[col].std()), 4),
+                "min": round(float(df[col].min()), 4),
+                "max": round(float(df[col].max()), 4),
+            }
+
+        # Value counts for categorical columns
+        categorical_stats = {}
+        for col in categorical_cols:
+            categorical_stats[col] = df[col].value_counts().to_dict()
+
+        # Histogram data for numeric columns
+        histogram_data = {}
+        for col in numeric_cols:
+            counts, bin_edges = pd.cut(df[col], bins=10, retbins=True)
+            histogram_data[col] = {
+                "counts": counts.value_counts(sort=False).tolist(),
+                "values": df[col].tolist()
+            }
 
         return {
             "rows": len(df),
             "columns": list(df.columns),
             "dtypes": df.dtypes.astype(str).to_dict(),
             "missing": df.isnull().sum().to_dict(),
-            "preview": df.head(5).to_dict(orient="records")
+            "preview": df.head(5).to_dict(orient="records"),
+            "full_data": df.to_dict(orient="records"),
+            "numeric_cols": numeric_cols,
+            "categorical_cols": categorical_cols,
+            "numeric_stats": numeric_stats,
+            "categorical_stats": categorical_stats,
+            "histogram_data": histogram_data,
+            "correlation": df[numeric_cols].corr().round(3).to_dict() if len(numeric_cols) > 1 else {}
         }
 
     def normality_test(self, data: dict) -> dict:
