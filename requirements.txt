@@ -8,3 +8,4 @@ lifelines==0.27.8
 groq==0.8.0
 python-dotenv==1.0.1
 pydantic==2.7.1
+numpy==1.26.4
