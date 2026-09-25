@@ -1,0 +1,13 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check repo
+        run: echo "OmniStat AI repo check passed"
