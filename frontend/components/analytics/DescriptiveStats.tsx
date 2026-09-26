@@ -37,7 +37,7 @@ export default function DescriptiveStats() {
       .filter((v: any) => v !== null && v !== undefined)
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/analytics/descriptive', {
+      const res = await fetch('process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/analytics/descriptive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values, column: selectedCol })
@@ -139,3 +139,4 @@ export default function DescriptiveStats() {
     </div>
   )
 }
+

@@ -55,14 +55,14 @@ function getEndpointForTest(test: string): { url: string; body: any } | null {
 
   if (normalityTests.some(keyword => t.includes(keyword))) {
     return {
-      url: 'http://127.0.0.1:8000/api/analytics/normality',
+      url: 'process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/analytics/normality',
       body: SAMPLE_DATA.normality
     }
   }
 
   if (survivalTests.some(keyword => t.includes(keyword))) {
     return {
-      url: 'http://127.0.0.1:8000/api/analytics/survival',
+      url: 'process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/analytics/survival',
       body: SAMPLE_DATA.survival
     }
   }
@@ -84,7 +84,7 @@ export default function JarvisInput() {
     setAnalysisResult(null)
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/agent/query', {
+      const res = await fetch('process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/agent/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query })
@@ -343,3 +343,4 @@ export default function JarvisInput() {
     </div>
   )
 }
+
