@@ -26,7 +26,7 @@ export default function NormalityTest() {
     }
 
     try {
-      const res = await fetch('process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/analytics/normality', {
+      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/normality', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: parsed })
@@ -138,4 +138,5 @@ export default function NormalityTest() {
     </div>
   )
 }
+
 

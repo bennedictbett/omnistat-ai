@@ -27,7 +27,7 @@ export default function SurvivalCurve() {
     }
 
     try {
-      const res = await fetch('process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/api/analytics/survival', {
+      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/survival', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -170,4 +170,5 @@ export default function SurvivalCurve() {
     </div>
   )
 }
+
 
