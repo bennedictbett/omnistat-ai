@@ -9,7 +9,7 @@ export default function Header() {
   useEffect(() => {
     const checkApi = async () => {
       try {
-        const res = await fetch('process.env.NEXT_PUBLIC_API_URL || 'https://omnistat-ai.onrender.com'/')
+        const res = await fetch('https://omnistat-ai.onrender.com/')
         if (res.ok) setApiStatus('online')
         else setApiStatus('offline')
       } catch {
@@ -49,4 +49,5 @@ export default function Header() {
     </header>
   )
 }
+
 
