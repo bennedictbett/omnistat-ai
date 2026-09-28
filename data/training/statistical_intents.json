@@ -1,0 +1,128 @@
+[
+  // T-TESTS
+  {"query": "compare blood pressure between two groups", "intent": {"test": "independent_t_test", "variables": ["blood_pressure", "group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "is there a difference in age between male and female patients", "intent": {"test": "independent_t_test", "variables": ["age", "gender"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "compare cholesterol levels between treatment and control", "intent": {"test": "independent_t_test", "variables": ["cholesterol", "group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "test if mean weight differs between two groups", "intent": {"test": "independent_t_test", "variables": ["weight", "group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "compare before and after treatment blood pressure", "intent": {"test": "paired_t_test", "variables": ["blood_pressure_before", "blood_pressure_after"], "assumptions": ["normality", "paired_observations"], "visualization": "boxplot"}},
+  {"query": "did the intervention change glucose levels", "intent": {"test": "paired_t_test", "variables": ["glucose_before", "glucose_after"], "assumptions": ["normality", "paired_observations"], "visualization": "line_chart"}},
+  {"query": "compare pre and post surgery pain scores", "intent": {"test": "paired_t_test", "variables": ["pain_before", "pain_after"], "assumptions": ["normality", "paired_observations"], "visualization": "boxplot"}},
+  {"query": "test if BMI changed after 6 months of treatment", "intent": {"test": "paired_t_test", "variables": ["bmi_baseline", "bmi_followup"], "assumptions": ["normality", "paired_observations"], "visualization": "boxplot"}},
+  {"query": "compare mean age to a known population value of 50", "intent": {"test": "one_sample_t_test", "variables": ["age"], "parameters": {"mu": 50}, "assumptions": ["normality"], "visualization": "histogram"}},
+  {"query": "test if average blood pressure is different from 120", "intent": {"test": "one_sample_t_test", "variables": ["blood_pressure"], "parameters": {"mu": 120}, "assumptions": ["normality"], "visualization": "histogram"}},
+
+  // ANOVA
+  {"query": "compare blood pressure across three treatment groups", "intent": {"test": "one_way_anova", "variables": ["blood_pressure", "group"], "assumptions": ["normality", "equal_variance", "independence"], "visualization": "boxplot"}},
+  {"query": "is there a difference in cholesterol between groups A B and C", "intent": {"test": "one_way_anova", "variables": ["cholesterol", "group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "compare pain scores across four drug dosage groups", "intent": {"test": "one_way_anova", "variables": ["pain_score", "dosage_group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "test for differences in recovery time between multiple groups", "intent": {"test": "one_way_anova", "variables": ["recovery_time", "group"], "assumptions": ["normality", "equal_variance"], "visualization": "boxplot"}},
+  {"query": "compare blood glucose across treatment time points and groups", "intent": {"test": "two_way_anova", "variables": ["glucose", "group", "time_point"], "assumptions": ["normality", "equal_variance"], "visualization": "interaction_plot"}},
+  {"query": "test interaction between drug and dose on blood pressure", "intent": {"test": "two_way_anova", "variables": ["blood_pressure", "drug", "dose"], "assumptions": ["normality", "equal_variance"], "visualization": "interaction_plot"}},
+  {"query": "repeated measures analysis of weight over 4 time points", "intent": {"test": "repeated_measures_anova", "variables": ["weight", "time_point"], "assumptions": ["normality", "sphericity"], "visualization": "line_chart"}},
+  {"query": "track cholesterol changes across monthly visits", "intent": {"test": "repeated_measures_anova", "variables": ["cholesterol", "visit"], "assumptions": ["normality", "sphericity"], "visualization": "line_chart"}},
+
+  // NORMALITY TESTS
+  {"query": "check if blood pressure is normally distributed", "intent": {"test": "shapiro_wilk", "variables": ["blood_pressure"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "test normality of age distribution", "intent": {"test": "shapiro_wilk", "variables": ["age"], "assumptions": [], "visualization": "qq_plot"}},
+  {"query": "is cholesterol data normally distributed", "intent": {"test": "shapiro_wilk", "variables": ["cholesterol"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "run normality test on glucose levels", "intent": {"test": "shapiro_wilk", "variables": ["glucose"], "assumptions": [], "visualization": "qq_plot"}},
+  {"query": "check distribution of BMI values", "intent": {"test": "shapiro_wilk", "variables": ["bmi"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "Kolmogorov-Smirnov test on blood pressure", "intent": {"test": "kolmogorov_smirnov", "variables": ["blood_pressure"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "Anderson-Darling normality test on cholesterol", "intent": {"test": "anderson_darling", "variables": ["cholesterol"], "assumptions": [], "visualization": "histogram"}},
+
+  // CORRELATION
+  {"query": "find correlation between age and blood pressure", "intent": {"test": "pearson_correlation", "variables": ["age", "blood_pressure"], "assumptions": ["normality", "linearity"], "visualization": "scatter_plot"}},
+  {"query": "is there a relationship between cholesterol and BMI", "intent": {"test": "pearson_correlation", "variables": ["cholesterol", "bmi"], "assumptions": ["normality", "linearity"], "visualization": "scatter_plot"}},
+  {"query": "correlate glucose levels with HbA1c", "intent": {"test": "pearson_correlation", "variables": ["glucose", "hba1c"], "assumptions": ["normality", "linearity"], "visualization": "scatter_plot"}},
+  {"query": "Spearman correlation between pain score and age", "intent": {"test": "spearman_correlation", "variables": ["pain_score", "age"], "assumptions": [], "visualization": "scatter_plot"}},
+  {"query": "non-parametric correlation between drug dose and response", "intent": {"test": "spearman_correlation", "variables": ["drug_dose", "response"], "assumptions": [], "visualization": "scatter_plot"}},
+  {"query": "show full correlation matrix for all numeric variables", "intent": {"test": "correlation_matrix", "variables": ["all_numeric"], "assumptions": [], "visualization": "heatmap"}},
+  {"query": "partial correlation between age and cholesterol controlling for BMI", "intent": {"test": "partial_correlation", "variables": ["age", "cholesterol"], "covariates": ["bmi"], "assumptions": ["normality"], "visualization": "scatter_plot"}},
+
+  // REGRESSION
+  {"query": "predict blood pressure from age and BMI", "intent": {"test": "multiple_linear_regression", "variables": ["blood_pressure", "age", "bmi"], "assumptions": ["linearity", "normality", "homoscedasticity"], "visualization": "regression_plot"}},
+  {"query": "linear regression of cholesterol on age", "intent": {"test": "simple_linear_regression", "variables": ["cholesterol", "age"], "assumptions": ["linearity", "normality"], "visualization": "regression_plot"}},
+  {"query": "predict disease outcome from risk factors", "intent": {"test": "logistic_regression", "variables": ["disease_outcome", "risk_factors"], "assumptions": ["independence", "no_multicollinearity"], "visualization": "roc_curve"}},
+  {"query": "logistic regression for mortality prediction", "intent": {"test": "logistic_regression", "variables": ["mortality", "age", "blood_pressure", "cholesterol"], "assumptions": ["independence"], "visualization": "roc_curve"}},
+  {"query": "Poisson regression for count of hospital visits", "intent": {"test": "poisson_regression", "variables": ["hospital_visits", "age", "comorbidities"], "assumptions": ["independence"], "visualization": "bar_chart"}},
+  {"query": "stepwise regression to find best predictors", "intent": {"test": "stepwise_regression", "variables": ["outcome", "all_predictors"], "assumptions": ["normality", "linearity"], "visualization": "regression_plot"}},
+
+  // NON-PARAMETRIC
+  {"query": "Mann-Whitney test between two groups", "intent": {"test": "mann_whitney_u", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "non-parametric comparison of two independent groups", "intent": {"test": "mann_whitney_u", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "Wilcoxon signed rank test for paired data", "intent": {"test": "wilcoxon_signed_rank", "variables": ["before", "after"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "non-parametric paired comparison before and after treatment", "intent": {"test": "wilcoxon_signed_rank", "variables": ["before", "after"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "Kruskal-Wallis test across multiple groups", "intent": {"test": "kruskal_wallis", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "non-parametric ANOVA for skewed data", "intent": {"test": "kruskal_wallis", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "Friedman test for repeated measures non-parametric", "intent": {"test": "friedman_test", "variables": ["outcome", "time_point", "subject"], "assumptions": [], "visualization": "line_chart"}},
+
+  // SURVIVAL ANALYSIS
+  {"query": "run survival analysis on patient cohort", "intent": {"test": "kaplan_meier", "variables": ["time_to_event", "event_occurred"], "assumptions": ["non_informative_censoring"], "visualization": "survival_curve"}},
+  {"query": "Kaplan-Meier curve for treatment vs control", "intent": {"test": "kaplan_meier", "variables": ["time_to_event", "event_occurred", "group"], "assumptions": ["non_informative_censoring"], "visualization": "survival_curve"}},
+  {"query": "compare survival between two groups", "intent": {"test": "kaplan_meier", "variables": ["time_to_event", "event_occurred", "group"], "assumptions": ["non_informative_censoring"], "visualization": "survival_curve"}},
+  {"query": "Cox proportional hazards model for mortality", "intent": {"test": "cox_regression", "variables": ["time_to_event", "event_occurred", "age", "treatment"], "assumptions": ["proportional_hazards"], "visualization": "survival_curve"}},
+  {"query": "hazard ratio for treatment effect on survival", "intent": {"test": "cox_regression", "variables": ["time_to_event", "event_occurred", "treatment"], "assumptions": ["proportional_hazards"], "visualization": "forest_plot"}},
+  {"query": "time to event analysis with covariates", "intent": {"test": "cox_regression", "variables": ["time_to_event", "event_occurred", "covariates"], "assumptions": ["proportional_hazards"], "visualization": "survival_curve"}},
+
+  // CHI-SQUARE & CATEGORICAL
+  {"query": "chi-square test between gender and disease outcome", "intent": {"test": "chi_square", "variables": ["gender", "disease_outcome"], "assumptions": ["expected_frequency_5"], "visualization": "contingency_table"}},
+  {"query": "is there association between smoking and lung cancer", "intent": {"test": "chi_square", "variables": ["smoking", "lung_cancer"], "assumptions": ["expected_frequency_5"], "visualization": "bar_chart"}},
+  {"query": "Fisher exact test for small sample categorical data", "intent": {"test": "fisher_exact", "variables": ["treatment", "outcome"], "assumptions": [], "visualization": "contingency_table"}},
+  {"query": "test association between drug response and gender", "intent": {"test": "chi_square", "variables": ["drug_response", "gender"], "assumptions": ["expected_frequency_5"], "visualization": "bar_chart"}},
+  {"query": "McNemar test for paired categorical data", "intent": {"test": "mcnemar", "variables": ["before", "after"], "assumptions": ["paired_observations"], "visualization": "contingency_table"}},
+
+  // DIAGNOSTIC / CLINICAL
+  {"query": "ROC curve for diagnostic test accuracy", "intent": {"test": "roc_auc", "variables": ["predicted", "actual"], "assumptions": [], "visualization": "roc_curve"}},
+  {"query": "sensitivity and specificity of blood test", "intent": {"test": "diagnostic_accuracy", "variables": ["test_result", "true_diagnosis"], "assumptions": [], "visualization": "roc_curve"}},
+  {"query": "Bland-Altman plot for method comparison", "intent": {"test": "bland_altman", "variables": ["method1", "method2"], "assumptions": [], "visualization": "bland_altman_plot"}},
+  {"query": "compare two measurement methods for agreement", "intent": {"test": "bland_altman", "variables": ["method1", "method2"], "assumptions": [], "visualization": "bland_altman_plot"}},
+  {"query": "intraclass correlation coefficient for reliability", "intent": {"test": "icc", "variables": ["rater1", "rater2"], "assumptions": [], "visualization": "scatter_plot"}},
+  {"query": "kappa statistic for inter-rater agreement", "intent": {"test": "cohen_kappa", "variables": ["rater1", "rater2"], "assumptions": [], "visualization": "contingency_table"}},
+
+  // DESCRIPTIVE
+  {"query": "show descriptive statistics for all columns", "intent": {"test": "descriptive_stats", "variables": ["all"], "assumptions": [], "visualization": "table"}},
+  {"query": "summary statistics for blood pressure", "intent": {"test": "descriptive_stats", "variables": ["blood_pressure"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "mean median standard deviation of age", "intent": {"test": "descriptive_stats", "variables": ["age"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "five number summary for cholesterol", "intent": {"test": "descriptive_stats", "variables": ["cholesterol"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "show distribution of all numeric variables", "intent": {"test": "descriptive_stats", "variables": ["all_numeric"], "assumptions": [], "visualization": "histogram"}},
+
+  // EPIDEMIOLOGY
+  {"query": "calculate relative risk for treatment vs control", "intent": {"test": "relative_risk", "variables": ["outcome", "exposure"], "assumptions": [], "visualization": "forest_plot"}},
+  {"query": "odds ratio for disease and risk factor", "intent": {"test": "odds_ratio", "variables": ["disease", "risk_factor"], "assumptions": [], "visualization": "forest_plot"}},
+  {"query": "number needed to treat calculation", "intent": {"test": "nnt", "variables": ["outcome", "treatment"], "assumptions": [], "visualization": "table"}},
+  {"query": "incidence rate of disease in cohort", "intent": {"test": "incidence_rate", "variables": ["event", "person_time"], "assumptions": [], "visualization": "bar_chart"}},
+  {"query": "prevalence of hypertension in study population", "intent": {"test": "prevalence", "variables": ["hypertension"], "assumptions": [], "visualization": "pie_chart"}},
+
+  // POWER ANALYSIS
+  {"query": "what sample size do I need for this study", "intent": {"test": "sample_size_calculation", "variables": [], "parameters": {"alpha": 0.05, "power": 0.8}, "assumptions": [], "visualization": "power_curve"}},
+  {"query": "calculate power for t-test with 50 samples per group", "intent": {"test": "power_analysis", "variables": [], "parameters": {"n": 50, "alpha": 0.05}, "assumptions": [], "visualization": "power_curve"}},
+  {"query": "minimum detectable effect size for my sample", "intent": {"test": "effect_size_calculation", "variables": [], "assumptions": [], "visualization": "power_curve"}},
+
+  // VISUALIZATION SPECIFIC
+  {"query": "show me a boxplot of blood pressure by group", "intent": {"test": "descriptive_stats", "variables": ["blood_pressure", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "scatter plot of age versus cholesterol", "intent": {"test": "pearson_correlation", "variables": ["age", "cholesterol"], "assumptions": [], "visualization": "scatter_plot"}},
+  {"query": "histogram of BMI distribution", "intent": {"test": "descriptive_stats", "variables": ["bmi"], "assumptions": [], "visualization": "histogram"}},
+  {"query": "pie chart of gender distribution", "intent": {"test": "descriptive_stats", "variables": ["gender"], "assumptions": [], "visualization": "pie_chart"}},
+  {"query": "3D bar chart of treatment outcomes by group and time", "intent": {"test": "descriptive_stats", "variables": ["outcome", "group", "time"], "assumptions": [], "visualization": "3d_bar_chart"}},
+  {"query": "heatmap of correlation matrix", "intent": {"test": "correlation_matrix", "variables": ["all_numeric"], "assumptions": [], "visualization": "heatmap"}},
+  {"query": "forest plot for meta-analysis results", "intent": {"test": "meta_analysis", "variables": ["effect_size", "ci_lower", "ci_upper", "study"], "assumptions": [], "visualization": "forest_plot"}},
+  {"query": "volcano plot for differential expression", "intent": {"test": "differential_expression", "variables": ["fold_change", "p_value"], "assumptions": [], "visualization": "volcano_plot"}},
+
+  // MACHINE LEARNING
+  {"query": "predict patient readmission using random forest", "intent": {"test": "random_forest", "variables": ["readmission", "all_features"], "assumptions": [], "visualization": "feature_importance"}},
+  {"query": "classify disease outcome using logistic regression", "intent": {"test": "logistic_regression", "variables": ["disease", "features"], "assumptions": [], "visualization": "roc_curve"}},
+  {"query": "cluster patients into groups based on lab values", "intent": {"test": "kmeans_clustering", "variables": ["all_numeric"], "assumptions": [], "visualization": "cluster_plot"}},
+  {"query": "principal component analysis of clinical variables", "intent": {"test": "pca", "variables": ["all_numeric"], "assumptions": [], "visualization": "pca_plot"}},
+  {"query": "SHAP values to explain model predictions", "intent": {"test": "shap_analysis", "variables": ["all_features"], "assumptions": [], "visualization": "shap_plot"}},
+  {"query": "cross validation for model performance", "intent": {"test": "cross_validation", "variables": ["outcome", "features"], "assumptions": [], "visualization": "learning_curve"}},
+
+  // POST-HOC
+  {"query": "Tukey HSD post hoc test after ANOVA", "intent": {"test": "tukey_hsd", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "Bonferroni correction for multiple comparisons", "intent": {"test": "bonferroni", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+  {"query": "which groups are significantly different after ANOVA", "intent": {"test": "tukey_hsd", "variables": ["outcome", "group"], "assumptions": [], "visualization": "boxplot"}},
+
+  // LAB QC
+  {"query": "Levey-Jennings chart for lab quality control", "intent": {"test": "levey_jennings", "variables": ["measurement", "time"], "assumptions": [], "visualization": "control_chart"}},
+  {"query": "Westgard rules violation detection", "intent": {"test": "westgard_rules", "variables": ["measurement", "mean", "sd"], "assumptions": [], "visualization": "control_chart"}},
+  {"query": "SPC chart for process control", "intent": {"test": "spc_chart", "variables": ["measurement", "time"], "assumptions": [], "visualization": "control_chart"}}
+]
