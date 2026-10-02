@@ -1,7 +1,9 @@
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.security.rate_limit import rate_limit_r
+from app.services.r_runner import RunnerBusy
 from app.services.r_templates import TemplateError, run_named_test, supported_tests
 
 router = APIRouter()
@@ -19,10 +21,13 @@ def list_r_tests():
     return supported_tests()
 
 
-@router.post("/run")
+# rate_limit_r depends on require_api_key, so auth runs first, then the limiter.
+@router.post("/run", dependencies=[Depends(rate_limit_r)])
 async def run_r_test(req: RAnalysisRequest):
     try:
         df = pd.DataFrame(req.data)
         return await run_named_test(req.test, req.variables, df)
     except TemplateError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except RunnerBusy as e:
+        raise HTTPException(status_code=503, detail=str(e), headers={"Retry-After": "10"})
