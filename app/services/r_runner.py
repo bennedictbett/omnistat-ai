@@ -33,6 +33,7 @@ POSIX = resource is not None
 RSCRIPT = os.getenv("RSCRIPT_BIN", "Rscript")
 R_LIBS = os.getenv("R_LIBS")  # optional extra library path for pre-installed packages
 MAX_CONCURRENT = int(os.getenv("R_MAX_CONCURRENT", "4"))
+QUEUE_WAIT_SECONDS = float(os.getenv("R_QUEUE_WAIT_SECONDS", "10"))
 CPU_SECONDS = int(os.getenv("R_CPU_SECONDS", "30"))
 MEMORY_BYTES = int(os.getenv("R_MEMORY_MB", "2048")) * 1024**2
 MAX_FILE_BYTES = 20 * 1024**2
@@ -70,6 +71,10 @@ write_json(list(results = .results, error = if (is.null(.err)) NA_character_ els
 """
 
 
+class RunnerBusy(Exception):
+    """All R slots stayed busy for QUEUE_WAIT_SECONDS; caller should return 503."""
+
+
 @dataclass
 class RResult:
     ok: bool
@@ -105,84 +110,104 @@ async def run_r(
     timeout: float = 30.0,
 ) -> RResult:
     """Run R code. `df` holds data_csv, `params` holds the params dict,
+    and emit("name", value) returns structured results.
+
+    Waits at most QUEUE_WAIT_SECONDS for a free slot, then raises RunnerBusy."""
+    sem = _semaphore()
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=QUEUE_WAIT_SECONDS)
+    except asyncio.TimeoutError:
+        raise RunnerBusy("R workers are busy, try again shortly") from None
+    try:
+        return await _run_r_unlocked(code, data_csv, params, timeout)
+    finally:
+        sem.release()
+
+
+async def _run_r_unlocked(
+    code: str,
+    data_csv: bytes | None = None,
+    params: dict | None = None,
+    timeout: float = 30.0,
+) -> RResult:
+    """Run R code. `df` holds data_csv, `params` holds the params dict,
     and emit("name", value) returns structured results."""
-    async with _semaphore():
-        workdir = Path(tempfile.mkdtemp(prefix="rrun_"))
-        start = time.monotonic()
+    workdir = Path(tempfile.mkdtemp(prefix="rrun_"))
+    start = time.monotonic()
+    try:
+        (workdir / "user.R").write_text(code, encoding="utf-8")
+        (workdir / "wrapper.R").write_text(WRAPPER, encoding="utf-8")
+        (workdir / "out").mkdir()
+        if params is not None:
+            (workdir / "params.json").write_text(json.dumps(params), encoding="utf-8")
+        if data_csv is not None:
+            (workdir / "input.csv").write_bytes(data_csv)
+
+        if POSIX:
+            env = {
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "HOME": str(workdir),
+                "TMPDIR": str(workdir),
+                "LANG": "C.UTF-8",
+            }
+            spawn_kwargs = {"start_new_session": True, "preexec_fn": _apply_limits}
+        else:
+            # Windows dev only: no sandboxing here, use Docker/WSL for anything real.
+            env = {**os.environ, "TMPDIR": str(workdir)}
+            spawn_kwargs = {}
+        if R_LIBS:
+            env["R_LIBS"] = R_LIBS
+
+        proc = await asyncio.create_subprocess_exec(
+            RSCRIPT, "--vanilla", "wrapper.R",
+            cwd=workdir,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            **spawn_kwargs,
+        )
+
+        timed_out = False
         try:
-            (workdir / "user.R").write_text(code, encoding="utf-8")
-            (workdir / "wrapper.R").write_text(WRAPPER, encoding="utf-8")
-            (workdir / "out").mkdir()
-            if params is not None:
-                (workdir / "params.json").write_text(json.dumps(params), encoding="utf-8")
-            if data_csv is not None:
-                (workdir / "input.csv").write_bytes(data_csv)
-
+            out, err = await asyncio.wait_for(proc.communicate(), timeout)
+        except asyncio.TimeoutError:
+            timed_out = True
             if POSIX:
-                env = {
-                    "PATH": "/usr/local/bin:/usr/bin:/bin",
-                    "HOME": str(workdir),
-                    "TMPDIR": str(workdir),
-                    "LANG": "C.UTF-8",
-                }
-                spawn_kwargs = {"start_new_session": True, "preexec_fn": _apply_limits}
+                os.killpg(proc.pid, signal.SIGKILL)
             else:
-                # Windows dev only: no sandboxing here, use Docker/WSL for anything real.
-                env = {**os.environ, "TMPDIR": str(workdir)}
-                spawn_kwargs = {}
-            if R_LIBS:
-                env["R_LIBS"] = R_LIBS
+                proc.kill()
+            out, err = await proc.communicate()
 
-            proc = await asyncio.create_subprocess_exec(
-                RSCRIPT, "--vanilla", "wrapper.R",
-                cwd=workdir,
-                env=env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                **spawn_kwargs,
-            )
-
-            timed_out = False
+        results: dict = {}
+        r_error: str | None = None
+        rj = workdir / "result.json"
+        if rj.exists():
             try:
-                out, err = await asyncio.wait_for(proc.communicate(), timeout)
-            except asyncio.TimeoutError:
-                timed_out = True
-                if POSIX:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                else:
-                    proc.kill()
-                out, err = await proc.communicate()
+                payload = json.loads(rj.read_text(encoding="utf-8"))
+                results = payload.get("results") or {}
+                r_error = payload.get("error") or None  # null / {} / "" -> no error
+            except json.JSONDecodeError:
+                r_error = "Could not parse R results"
 
-            results: dict = {}
-            r_error: str | None = None
-            rj = workdir / "result.json"
-            if rj.exists():
-                try:
-                    payload = json.loads(rj.read_text(encoding="utf-8"))
-                    results = payload.get("results") or {}
-                    r_error = payload.get("error") or None  # null / {} / "" -> no error
-                except json.JSONDecodeError:
-                    r_error = "Could not parse R results"
+        plots = []
+        for p in sorted((workdir / "out").glob("*.png")):
+            if p.stat().st_size <= MAX_PLOT_BYTES:
+                plots.append(base64.b64encode(p.read_bytes()).decode())
 
-            plots = []
-            for p in sorted((workdir / "out").glob("*.png")):
-                if p.stat().st_size <= MAX_PLOT_BYTES:
-                    plots.append(base64.b64encode(p.read_bytes()).decode())
+        if timed_out:
+            r_error = f"Timed out after {timeout:.0f}s"
+        elif proc.returncode != 0 and not r_error:
+            r_error = f"R exited with code {proc.returncode} (possible memory/CPU limit)"
 
-            if timed_out:
-                r_error = f"Timed out after {timeout:.0f}s"
-            elif proc.returncode != 0 and not r_error:
-                r_error = f"R exited with code {proc.returncode} (possible memory/CPU limit)"
-
-            return RResult(
-                ok=r_error is None,
-                stdout=_trim(out),
-                stderr=_trim(err),
-                results=results,
-                error=r_error,
-                plots=plots,
-                timed_out=timed_out,
-                duration_s=round(time.monotonic() - start, 3),
-            )
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+        return RResult(
+            ok=r_error is None,
+            stdout=_trim(out),
+            stderr=_trim(err),
+            results=results,
+            error=r_error,
+            plots=plots,
+            timed_out=timed_out,
+            duration_s=round(time.monotonic() - start, 3),
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
