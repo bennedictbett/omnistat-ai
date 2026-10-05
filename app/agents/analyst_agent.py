@@ -35,6 +35,23 @@ def _extract_json(raw: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
+def _build_kwargs(model: str, messages: list, json_mode: bool) -> dict:
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.1,
+        # gpt-oss models spend part of this budget on reasoning, so keep it generous
+        "max_tokens": 1500,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    if "gpt-oss" in model:
+        # Sent via extra_body because the pinned groq SDK (0.8/0.9) has no reasoning_effort
+        # argument and would raise TypeError. extra_body works on every SDK version.
+        kwargs["extra_body"] = {"reasoning_effort": "low"}
+    return kwargs
+
+
 class AnalystAgent:
     def __init__(self):
         self._client = None
@@ -59,18 +76,7 @@ class AnalystAgent:
             json_mode = True
             while True:
                 try:
-                    kwargs = {
-                        "model": model,
-                        "messages": messages,
-                        "temperature": 0.1,
-                        # gpt-oss models spend part of this budget on reasoning, so keep it generous
-                        "max_tokens": 1500,
-                    }
-                    if "gpt-oss" in model:
-                        kwargs["reasoning_effort"] = "low"
-                    if json_mode:
-                        kwargs["response_format"] = {"type": "json_object"}
-
+                    kwargs = _build_kwargs(model, messages, json_mode)
                     response = self.get_client().chat.completions.create(**kwargs)
                     choice = response.choices[0]
                     raw = (choice.message.content or "").strip()
