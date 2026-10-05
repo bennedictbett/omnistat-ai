@@ -1,6 +1,10 @@
 import asyncio
+import inspect
+import json
 import logging
 from types import SimpleNamespace
+
+import pytest
 
 from app.agents import analyst_agent
 from app.agents.analyst_agent import AnalystAgent
@@ -45,7 +49,8 @@ def test_first_model_success_and_request_shape():
     assert r["success"] and r["intent"]["test"] == "independent_t_test"
     assert r["model_used"] == "openai/gpt-oss-20b" and len(calls) == 1
     c = calls[0]
-    assert c["reasoning_effort"] == "low" and c["max_tokens"] >= 1000
+    assert c["extra_body"] == {"reasoning_effort": "low"} and c["max_tokens"] >= 1000
+    assert "reasoning_effort" not in c  # must not be a direct kwarg: the pinned groq SDK rejects it
     assert c["response_format"] == {"type": "json_object"}
 
 
@@ -99,4 +104,38 @@ def test_models_can_be_overridden_by_env(monkeypatch):
     agent, calls = make_agent([GOOD])
     r = run(agent)
     assert r["model_used"] == "some/other-model"
-    assert "reasoning_effort" not in calls[0]  # only sent to gpt-oss models
+    assert "extra_body" not in calls[0]  # reasoning_effort is only sent to gpt-oss models
+
+
+# ---- regression tests against the REAL groq SDK (a mock accepts any argument and hides TypeErrors) ----
+
+def test_every_argument_we_send_is_accepted_by_the_installed_groq_sdk():
+    pytest.importorskip("groq")
+    from groq.resources.chat.completions import Completions
+
+    accepted = set(inspect.signature(Completions.create).parameters)
+    for model in analyst_agent.DEFAULT_MODELS + ["some/other-model"]:
+        for json_mode in (True, False):
+            sent = set(analyst_agent._build_kwargs(model, [], json_mode))
+            assert sent <= accepted, f"{model}: SDK does not accept {sent - accepted}"
+
+
+def test_agent_works_through_the_real_sdk_and_puts_reasoning_effort_on_the_wire():
+    groq = pytest.importorskip("groq")
+    httpx = pytest.importorskip("httpx")
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={
+            "id": "x", "object": "chat.completion", "created": 0, "model": "m",
+            "choices": [{"index": 0, "finish_reason": "stop",
+                         "message": {"role": "assistant", "content": GOOD}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}})
+
+    agent = AnalystAgent()
+    agent._client = groq.Groq(api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    r = run(agent)
+    assert r["success"] and r["intent"]["test"] == "independent_t_test"
+    assert seen["body"]["reasoning_effort"] == "low"
+    assert seen["body"]["response_format"] == {"type": "json_object"}
