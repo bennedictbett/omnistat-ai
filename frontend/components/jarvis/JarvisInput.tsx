@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Brain, Send, Loader2, Play } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import RAnalysisPanel from '@/components/jarvis/RAnalysisPanel'
+import { RTestCatalog, fetchRTests, normalizeTestName } from '@/lib/rApi'
 
 interface JarvisIntent {
   test: string
@@ -76,12 +78,15 @@ export default function JarvisInput() {
   const [running, setRunning] = useState(false)
   const [response, setResponse] = useState<JarvisResponse | null>(null)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [rCatalog, setRCatalog] = useState<RTestCatalog | null>(null)
+  const [rTest, setRTest] = useState<string | null>(null)
 
   const handleSubmit = async () => {
     if (!query.trim()) return
     setLoading(true)
     setResponse(null)
     setAnalysisResult(null)
+    setRTest(null)
 
     try {
       const res = await fetch('https://omnistat-ai.onrender.com/api/agent/query', {
@@ -102,6 +107,24 @@ export default function JarvisInput() {
     if (!response?.intent) return
     setRunning(true)
     setAnalysisResult(null)
+    setRTest(null)
+
+    // Tests that have an R template run on the user's uploaded data via the column picker.
+    let catalog = rCatalog
+    if (!catalog) {
+      try {
+        catalog = await fetchRTests()
+        setRCatalog(catalog)
+      } catch {
+        catalog = null // backend unreachable: fall back to the original behaviour below
+      }
+    }
+    const rName = normalizeTestName(response.intent.test)
+    if (catalog && catalog[rName]) {
+      setRTest(rName)
+      setRunning(false)
+      return
+    }
 
     const endpoint = getEndpointForTest(response.intent.test)
 
@@ -255,6 +278,15 @@ export default function JarvisInput() {
         </div>
       )}
 
+      {/* R analysis on uploaded data */}
+      {rTest && rCatalog && rCatalog[rTest] && response?.intent && (
+        <RAnalysisPanel
+          test={rTest}
+          spec={rCatalog[rTest]}
+          intentVariables={response.intent.variables}
+        />
+      )}
+
             {/* Analysis Result */}
       {analysisResult && (
         <div className="rounded-lg border border-blue-500/20 bg-gray-900 p-5 space-y-4">
@@ -343,5 +375,3 @@ export default function JarvisInput() {
     </div>
   )
 }
-
-
