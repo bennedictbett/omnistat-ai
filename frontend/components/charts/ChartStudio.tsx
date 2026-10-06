@@ -9,6 +9,7 @@ import {
   StylePreset,
   buildFigure,
   defaultSelection,
+  groupableColumns,
   toDataset,
 } from '@/lib/chartStudio'
 
@@ -22,6 +23,8 @@ interface Props {
 const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: 'scatter', label: 'Scatter' },
   { id: 'scatter3d', label: '3D Scatter' },
+  { id: 'box', label: 'Box' },
+  { id: 'violin', label: 'Violin' },
 ]
 
 const PRESETS: { id: StylePreset; label: string; hint: string }[] = [
@@ -32,11 +35,14 @@ const PRESETS: { id: StylePreset; label: string; hint: string }[] = [
 export default function ChartStudio({ data }: Props) {
   const ds = useMemo(() => toDataset(data), [data])
   const datasetKey = ds ? ds.columns.join('|') : ''
+  const groupable = useMemo(() => (ds ? groupableColumns(ds) : []), [ds])
 
   const [type, setType] = useState<ChartType>('scatter')
   const [preset, setPreset] = useState<StylePreset>('dark')
   const [trendline, setTrendline] = useState(false)
-  const [sel, setSel] = useState({ x: '', y: '', z: '', color: '' })
+  const [showPoints, setShowPoints] = useState(true)
+  const [showMean, setShowMean] = useState(true)
+  const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<{ plotted: number; skipped: number; notes: string[] } | null>(null)
@@ -64,12 +70,16 @@ export default function ChartStudio({ data }: Props) {
   useEffect(() => {
     const el = chartRef.current
     if (!plotly || !ds || !el) return
+    const dist = type === 'box' || type === 'violin'
     const cfg: ChartConfig = {
       type,
       x: sel.x,
       y: sel.y,
       z: type === 'scatter3d' ? sel.z : undefined,
-      color: sel.color || undefined,
+      color: !dist && sel.color ? sel.color : undefined,
+      group: dist && sel.group ? sel.group : undefined,
+      showPoints,
+      showMean,
       preset,
       trendline: type === 'scatter' ? trendline : false,
     }
@@ -93,7 +103,7 @@ export default function ChartStudio({ data }: Props) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -133,22 +143,25 @@ export default function ChartStudio({ data }: Props) {
     return (
       <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-5 max-w-2xl">
         <p className="text-sm font-medium text-yellow-400">No numeric columns found</p>
-        <p className="text-xs text-gray-400 mt-1">Scatter charts need at least two columns of numbers.</p>
+        <p className="text-xs text-gray-400 mt-1">Charts need at least one column of numbers.</p>
       </div>
     )
   }
 
   const is3d = type === 'scatter3d'
-  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = is3d
-    ? [
-        { key: 'x', label: 'X axis' },
-        { key: 'y', label: 'Y axis' },
-        { key: 'z', label: 'Z axis' },
-      ]
-    : [
-        { key: 'x', label: 'X axis' },
-        { key: 'y', label: 'Y axis' },
-      ]
+  const isDist = type === 'box' || type === 'violin'
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isDist
+    ? [{ key: 'y', label: 'Value' }]
+    : is3d
+      ? [
+          { key: 'x', label: 'X axis' },
+          { key: 'y', label: 'Y axis' },
+          { key: 'z', label: 'Z axis' },
+        ]
+      : [
+          { key: 'x', label: 'X axis' },
+          { key: 'y', label: 'Y axis' },
+        ]
 
   const selectClass =
     'mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500/50'
@@ -209,24 +222,44 @@ export default function ChartStudio({ data }: Props) {
               </select>
             </label>
           ))}
-          <label className="block">
-            <span className="text-xs text-gray-500">Colour by (optional)</span>
-            <select
-              value={sel.color}
-              onChange={(e) => setSel((s) => ({ ...s, color: e.target.value }))}
-              className={selectClass}
-            >
-              <option value="">None</option>
-              {ds.categoricalCols.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isDist ? (
+            <label className="block">
+              <span className="text-xs text-gray-500">Group by (optional)</span>
+              <select
+                value={sel.group}
+                onChange={(e) => setSel((s) => ({ ...s, group: e.target.value }))}
+                className={selectClass}
+              >
+                <option value="">None (one group)</option>
+                {groupable
+                  .filter((c) => c !== sel.y)
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : (
+            <label className="block">
+              <span className="text-xs text-gray-500">Colour by (optional)</span>
+              <select
+                value={sel.color}
+                onChange={(e) => setSel((s) => ({ ...s, color: e.target.value }))}
+                className={selectClass}
+              >
+                <option value="">None</option>
+                {ds.categoricalCols.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
-        {!is3d && (
+        {type === 'scatter' && (
           <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
             <input
               type="checkbox"
@@ -236,6 +269,29 @@ export default function ChartStudio({ data }: Props) {
             />
             Add straight-line fit (with R²)
           </label>
+        )}
+
+        {isDist && (
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPoints}
+                onChange={(e) => setShowPoints(e.target.checked)}
+                className="accent-green-500"
+              />
+              Show individual points
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showMean}
+                onChange={(e) => setShowMean(e.target.checked)}
+                className="accent-green-500"
+              />
+              {type === 'box' ? 'Show mean ± SD' : 'Show mean line'}
+            </label>
+          </div>
         )}
       </div>
 

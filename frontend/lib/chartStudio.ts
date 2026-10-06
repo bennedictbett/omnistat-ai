@@ -12,7 +12,7 @@ export interface Dataset {
   rows: Record<string, unknown>[]
 }
 
-export type ChartType = 'scatter' | 'scatter3d'
+export type ChartType = 'scatter' | 'scatter3d' | 'box' | 'violin'
 export type StylePreset = 'dark' | 'graphpad'
 
 export interface ChartConfig {
@@ -25,6 +25,12 @@ export interface ChartConfig {
   preset: StylePreset
   /** 2D scatter only: add a least-squares line (per group when colouring) */
   trendline?: boolean
+  /** Box and violin only: the column that splits the values into groups (omit for one group). The values come from `y`. */
+  group?: string
+  /** Box and violin only: draw every individual value (default true) */
+  showPoints?: boolean
+  /** Box and violin only: mark the mean (box: mean ± SD; violin: mean line). Default true */
+  showMean?: boolean
 }
 
 export interface Figure {
@@ -62,10 +68,39 @@ export function toDataset(raw: unknown): Dataset | null {
   }
 }
 
+/**
+ * Columns that make sense for splitting values into groups: the categorical ones, plus numeric
+ * columns that only hold a few distinct values (like a 0/1 outcome).
+ */
+export function groupableColumns(ds: Dataset): string[] {
+  const out = [...ds.categoricalCols]
+  for (const c of ds.numericCols) {
+    if (out.includes(c)) continue
+    const seen = new Set<string>()
+    let filled = 0
+    for (const row of ds.rows) {
+      const v = row[c]
+      if (v === null || v === undefined || v === '') continue
+      filled++
+      seen.add(String(v))
+      if (seen.size > MAX_GROUPS) break
+    }
+    // Needs 2 to MAX_GROUPS groups, averaging at least 2 rows each (so IDs and measurements are not offered).
+    if (seen.size >= 2 && seen.size <= MAX_GROUPS && seen.size <= filled / 2) out.push(c)
+  }
+  return out
+}
+
 /** Sensible starting columns so the chart draws immediately after upload. */
-export function defaultSelection(ds: Dataset): { x: string; y: string; z: string; color: string } {
+export function defaultSelection(ds: Dataset): { x: string; y: string; z: string; color: string; group: string } {
   const n = ds.numericCols
-  return { x: n[0] ?? '', y: n[1] ?? n[0] ?? '', z: n[2] ?? n[1] ?? n[0] ?? '', color: '' }
+  return {
+    x: n[0] ?? '',
+    y: n[1] ?? n[0] ?? '',
+    z: n[2] ?? n[1] ?? n[0] ?? '',
+    color: '',
+    group: ds.categoricalCols[0] ?? '',
+  }
 }
 
 // ---------- Numbers ----------
@@ -192,6 +227,21 @@ function baseLayout(t: Theme, showLegend: boolean): Partial<Layout> {
   return layout
 }
 
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex)
+  if (!m) return hex
+  const n = parseInt(m[1], 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
+}
+
+function figureConfig(): Partial<Config> {
+  return {
+    responsive: true,
+    displaylogo: false,
+    toImageButtonOptions: { format: 'png', scale: 2, filename: 'omnistat-chart' },
+  }
+}
+
 // ---------- Figure ----------
 
 interface Point {
@@ -206,7 +256,100 @@ function groupLabel(v: unknown): string {
   return String(v)
 }
 
+
+/** Box or violin plot: one box/violin per group, with the individual values drawn on top. */
+function buildDistribution(ds: Dataset, cfg: ChartConfig): Figure {
+  const isViolin = cfg.type === 'violin'
+  if (!cfg.y) throw new ChartError('Choose the column to summarise.')
+  for (const c of [cfg.y, ...(cfg.group ? [cfg.group] : [])]) {
+    if (!ds.columns.includes(c)) throw new ChartError(`Column "${c}" is not in your data.`)
+  }
+
+  const t = THEMES[cfg.preset]
+  const showPoints = cfg.showPoints !== false
+  const showMean = cfg.showMean !== false
+
+  const groups = new Map<string, number[]>()
+  let plotted = 0
+  let skipped = 0
+  for (const row of ds.rows) {
+    const y = toNumber(row[cfg.y])
+    if (y === null) {
+      skipped++
+      continue
+    }
+    const label = cfg.group ? groupLabel(row[cfg.group]) : cfg.y
+    const list = groups.get(label)
+    if (list) list.push(y)
+    else groups.set(label, [y])
+    plotted++
+  }
+  if (plotted < 2) {
+    throw new ChartError(`Not enough numeric values to plot (${plotted}). Check that ${cfg.y} contains numbers.`)
+  }
+  if (groups.size > MAX_GROUPS) {
+    throw new ChartError(
+      `"${cfg.group}" has ${groups.size} different values, which is too many to compare. Choose a column with at most ${MAX_GROUPS}.`
+    )
+  }
+
+  const names = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const graphpad = cfg.preset === 'graphpad'
+
+  const data: Data[] = names.map((name, i) => {
+    const colour = t.palette[i % t.palette.length]
+    const common = {
+      name,
+      y: groups.get(name) as number[],
+      showlegend: false,
+      line: { color: colour, width: 2 },
+      fillcolor: graphpad ? 'rgba(255,255,255,0)' : withAlpha(colour, 0.25),
+    }
+    const pointStyle = {
+      marker: { color: colour, size: graphpad ? 7 : 6, opacity: graphpad ? 0.9 : 0.75 },
+      jitter: 0.5,
+      pointpos: 0,
+    }
+    if (isViolin) {
+      return {
+        type: 'violin',
+        ...common,
+        // point settings only apply (and are only sent) when points are drawn
+        ...(showPoints ? { points: 'all', ...pointStyle } : { points: false }),
+        box: { visible: true },
+        meanline: { visible: showMean },
+        spanmode: 'hard',
+      } as Data
+    }
+    return {
+      type: 'box',
+      ...common,
+      ...pointStyle,
+      boxpoints: showPoints ? 'all' : 'outliers',
+      boxmean: showMean ? 'sd' : false,
+    } as Data
+  })
+
+  const notes: string[] = []
+  const small = names.filter((n) => (groups.get(n) as number[]).length < 5)
+  if (small.length > 0) {
+    const list = small.map((n) => `${n} (n=${(groups.get(n) as number[]).length})`).join(', ')
+    notes.push(
+      `Small groups: ${list}. With so few values the ${isViolin ? 'violin' : 'box'} shape is not very reliable${
+        showPoints ? '; every individual value is shown.' : '. Turn on individual points to see them all.'
+      }`
+    )
+  }
+
+  const layout = baseLayout(t, false)
+  layout.xaxis = { ...axisFor(cfg.group ?? '', t), type: 'category' }
+  layout.yaxis = axisFor(cfg.y, t)
+
+  return { data, layout, config: figureConfig(), plotted, skipped, groups: names.length, notes }
+}
+
 export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
+  if (cfg.type === 'box' || cfg.type === 'violin') return buildDistribution(ds, cfg)
   const is3d = cfg.type === 'scatter3d'
   const needed = is3d ? [cfg.x, cfg.y, cfg.z ?? ''] : [cfg.x, cfg.y]
   if (needed.some((c) => !c)) throw new ChartError('Choose a column for every axis.')
@@ -340,11 +483,7 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
   return {
     data,
     layout,
-    config: {
-      responsive: true,
-      displaylogo: false,
-      toImageButtonOptions: { format: 'png', scale: 2, filename: 'omnistat-chart' },
-    },
+    config: figureConfig(),
     plotted: pts.length,
     skipped,
     groups: names.length,
