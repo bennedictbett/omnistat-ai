@@ -8,6 +8,8 @@ import {
   ChartType,
   ErrorBars,
   GroupSummary,
+  HistNorm,
+  MAX_BINS,
   StylePreset,
   buildFigure,
   defaultSelection,
@@ -26,6 +28,7 @@ interface Props {
 const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: 'scatter', label: 'Scatter' },
   { id: 'scatter3d', label: '3D Scatter' },
+  { id: 'histogram', label: 'Histogram' },
   { id: 'box', label: 'Box' },
   { id: 'violin', label: 'Violin' },
   { id: 'bar', label: 'Bar' },
@@ -35,6 +38,12 @@ const ERROR_BAR_OPTIONS: { id: ErrorBars; label: string }[] = [
   { id: 'sd', label: 'SD (standard deviation)' },
   { id: 'sem', label: 'SEM (standard error)' },
   { id: 'ci95', label: '95% confidence interval' },
+]
+
+const HIST_NORM_OPTIONS: { id: HistNorm; label: string }[] = [
+  { id: 'count', label: 'Count' },
+  { id: 'percent', label: 'Percent' },
+  { id: 'density', label: 'Density' },
 ]
 
 const PRESETS: { id: StylePreset; label: string; hint: string }[] = [
@@ -53,6 +62,8 @@ export default function ChartStudio({ data }: Props) {
   const [showPoints, setShowPoints] = useState(true)
   const [showMean, setShowMean] = useState(true)
   const [errorBars, setErrorBars] = useState<ErrorBars>('sd')
+  const [histNorm, setHistNorm] = useState<HistNorm>('count')
+  const [bins, setBins] = useState('') // empty = automatic
   const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -87,7 +98,8 @@ export default function ChartStudio({ data }: Props) {
   useEffect(() => {
     const el = chartRef.current
     if (!plotly || !ds || !el) return
-    const grouped = type === 'box' || type === 'violin' || type === 'bar'
+    const grouped = type === 'box' || type === 'violin' || type === 'bar' || type === 'histogram'
+    const binCount = Number(bins)
     const cfg: ChartConfig = {
       type,
       x: sel.x,
@@ -98,6 +110,8 @@ export default function ChartStudio({ data }: Props) {
       showPoints,
       showMean,
       errorBars,
+      histNorm,
+      bins: bins !== '' && Number.isFinite(binCount) ? Math.min(MAX_BINS, Math.max(1, Math.floor(binCount))) : undefined,
       preset,
       trendline: type === 'scatter' ? trendline : false,
     }
@@ -121,7 +135,7 @@ export default function ChartStudio({ data }: Props) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -168,8 +182,10 @@ export default function ChartStudio({ data }: Props) {
 
   const is3d = type === 'scatter3d'
   const isDist = type === 'box' || type === 'violin'
+  const isHist = type === 'histogram'
   const isGrouped = isDist || type === 'bar'
-  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isGrouped
+  const usesGroup = isGrouped || isHist
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = usesGroup
     ? [{ key: 'y', label: 'Value' }]
     : is3d
       ? [
@@ -241,15 +257,15 @@ export default function ChartStudio({ data }: Props) {
               </select>
             </label>
           ))}
-          {isGrouped ? (
+          {usesGroup ? (
             <label className="block">
-              <span className="text-xs text-gray-500">Group by (optional)</span>
+              <span className="text-xs text-gray-500">{isHist ? 'Overlay by (optional)' : 'Group by (optional)'}</span>
               <select
                 value={sel.group}
                 onChange={(e) => setSel((s) => ({ ...s, group: e.target.value }))}
                 className={selectClass}
               >
-                <option value="">None (one group)</option>
+                <option value="">{isHist ? 'None (one histogram)' : 'None (one group)'}</option>
                 {groupable
                   .filter((c) => c !== sel.y)
                   .map((c) => (
@@ -288,6 +304,38 @@ export default function ChartStudio({ data }: Props) {
             />
             Add straight-line fit (with R²)
           </label>
+        )}
+
+        {isHist && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">Bins</span>
+              <input
+                type="number"
+                min={1}
+                max={MAX_BINS}
+                step={1}
+                value={bins}
+                placeholder="Auto"
+                onChange={(e) => setBins(e.target.value)}
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">Bar height</span>
+              <select
+                value={histNorm}
+                onChange={(e) => setHistNorm(e.target.value as HistNorm)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              >
+                {HIST_NORM_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         )}
 
         {isGrouped && (
@@ -351,7 +399,7 @@ export default function ChartStudio({ data }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <p className="text-xs text-gray-500">
-              {info.plotted} points plotted
+              {info.plotted} {type === 'histogram' ? 'values' : 'points'} plotted
               {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
             </p>
             {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
