@@ -12,11 +12,13 @@ export interface Dataset {
   rows: Record<string, unknown>[]
 }
 
-export type ChartType = 'scatter' | 'scatter3d' | 'box' | 'violin' | 'bar'
+export type ChartType = 'scatter' | 'scatter3d' | 'histogram' | 'box' | 'violin' | 'bar'
 
 /** What the error bars on a bar chart show */
 export type ErrorBars = 'sd' | 'sem' | 'ci95'
 export type StylePreset = 'dark' | 'graphpad'
+/** What the bar heights of a histogram show */
+export type HistNorm = 'count' | 'percent' | 'density'
 
 export interface ChartConfig {
   type: ChartType
@@ -36,6 +38,10 @@ export interface ChartConfig {
   showMean?: boolean
   /** Bar chart only: standard deviation, standard error of the mean, or 95% confidence interval (default 'sd') */
   errorBars?: ErrorBars
+  /** Histogram only: number of bins (omit or 0 for automatic) */
+  bins?: number
+  /** Histogram only: bar heights as counts, percent of values, or density (default 'count') */
+  histNorm?: HistNorm
 }
 
 export interface Figure {
@@ -565,7 +571,127 @@ function buildBar(ds: Dataset, cfg: ChartConfig): Figure {
   }
 }
 
+
+// ---------- Histogram ----------
+
+/** Maximum number of groups that can be overlaid on one histogram before it becomes unreadable. */
+export const MAX_HIST_GROUPS = 8
+export const MAX_BINS = 100
+
+/** Linear-interpolated quantile of an ascending-sorted array. */
+export function quantile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return NaN
+  const pos = (sorted.length - 1) * p
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+}
+
+export interface BinPlan {
+  start: number
+  end: number
+  size: number
+  count: number
+}
+
+/**
+ * Chooses bins shared by every group, so overlaid histograms line up.
+ * `requested` > 0 fixes the bin count; otherwise the Freedman-Diaconis rule is used,
+ * falling back to Sturges' rule when the interquartile range is zero.
+ */
+export function planBins(values: number[], requested?: number): BinPlan {
+  const sorted = [...values].sort((a, b) => a - b)
+  const n = sorted.length
+  const min = sorted[0]
+  const max = sorted[n - 1]
+  if (min === max) return { start: min - 0.5, end: min + 0.5, size: 1, count: 1 }
+
+  let count: number
+  if (requested && requested > 0) {
+    count = Math.floor(requested)
+  } else {
+    const iqr = quantile(sorted, 0.75) - quantile(sorted, 0.25)
+    const width = iqr > 0 ? (2 * iqr) / Math.cbrt(n) : 0
+    count = width > 0 ? Math.ceil((max - min) / width) : Math.ceil(Math.log2(n)) + 1
+  }
+  count = Math.max(1, Math.min(MAX_BINS, count))
+
+  // Widen each bin very slightly so the largest value falls inside the last bin instead of
+  // starting a bin of its own (Plotly bins are closed on the left only).
+  const size = ((max - min) / count) * (1 + 1e-6)
+  return { start: min, end: min + size * count, size, count }
+}
+
+const HIST_NORM: Record<HistNorm, { plotly: string; axis: string; words: string }> = {
+  count: { plotly: '', axis: 'Count', words: 'the number of values in each bin' },
+  percent: { plotly: 'percent', axis: 'Percent of values (%)', words: 'the percent of values in each bin' },
+  density: { plotly: 'probability density', axis: 'Density', words: 'the density (the total area is 1)' },
+}
+
+/** Histogram of one column, optionally one overlaid histogram per group. */
+function buildHistogram(ds: Dataset, cfg: ChartConfig): Figure {
+  const t = THEMES[cfg.preset]
+  const norm: HistNorm = cfg.histNorm ?? 'count'
+  const graphpad = cfg.preset === 'graphpad'
+  const { groups, names, plotted, skipped } = collectGroups(ds, cfg)
+  if (names.length > MAX_HIST_GROUPS) {
+    throw new ChartError(
+      `"${cfg.group}" has ${names.length} different values, which is too many to overlay. Choose a column with at most ${MAX_HIST_GROUPS}.`
+    )
+  }
+  const multi = names.length > 1
+  const plan = planBins(names.flatMap((n) => groups.get(n) as number[]), cfg.bins)
+
+  const data: Data[] = names.map((name, i) => {
+    const colour = t.palette[i % t.palette.length]
+    return {
+      type: 'histogram',
+      name,
+      x: groups.get(name) as number[],
+      xbins: { start: plan.start, end: plan.end, size: plan.size },
+      autobinx: false,
+      histnorm: HIST_NORM[norm].plotly,
+      marker: {
+        color: withAlpha(colour, graphpad ? (multi ? 0.25 : 0.15) : multi ? 0.55 : 0.7),
+        line: { color: colour, width: graphpad ? 2 : 1 },
+      },
+      showlegend: multi,
+      hovertemplate: `${cfg.y}: %{x}<br>${HIST_NORM[norm].axis}: %{y:.4g}<extra>${multi ? name : ''}</extra>`,
+    } as Data
+  })
+
+  const layout = baseLayout(t, multi)
+  layout.xaxis = axisFor(cfg.y, t)
+  layout.yaxis = axisFor(HIST_NORM[norm].axis, t)
+  layout.barmode = 'overlay'
+  layout.bargap = graphpad ? 0 : 0.03
+
+  const notes: string[] = []
+  const small = names.filter((n) => (groups.get(n) as number[]).length < 10)
+  if (small.length > 0) {
+    const list = small.map((n) => `${multi ? n + ' ' : ''}(n=${(groups.get(n) as number[]).length})`).join(', ')
+    notes.push(`Few values: ${list}. A histogram of fewer than 10 values says little about the shape of the data.`)
+  }
+  if (multi && norm !== 'count') {
+    notes.push('Each group is scaled by its own total, so groups of different sizes can be compared by shape.')
+  }
+
+  return {
+    data,
+    layout,
+    config: figureConfig(),
+    plotted,
+    skipped,
+    groups: names.length,
+    notes,
+    caption:
+      `Bar heights show ${HIST_NORM[norm].words}. ${plan.count} ${plan.count === 1 ? 'bin' : 'bins'} of width ${formatStat(plan.size)}` +
+      `${cfg.bins && cfg.bins > 0 ? '' : ' (chosen automatically)'}.`,
+  }
+}
+
 export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
+  if (cfg.type === 'histogram') return buildHistogram(ds, cfg)
   if (cfg.type === 'box' || cfg.type === 'violin') return buildDistribution(ds, cfg)
   if (cfg.type === 'bar') return buildBar(ds, cfg)
   const is3d = cfg.type === 'scatter3d'
