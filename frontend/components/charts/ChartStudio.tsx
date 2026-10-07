@@ -6,9 +6,12 @@ import {
   ChartConfig,
   ChartError,
   ChartType,
+  ErrorBars,
+  GroupSummary,
   StylePreset,
   buildFigure,
   defaultSelection,
+  formatStat,
   groupableColumns,
   toDataset,
 } from '@/lib/chartStudio'
@@ -25,6 +28,13 @@ const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: 'scatter3d', label: '3D Scatter' },
   { id: 'box', label: 'Box' },
   { id: 'violin', label: 'Violin' },
+  { id: 'bar', label: 'Bar' },
+]
+
+const ERROR_BAR_OPTIONS: { id: ErrorBars; label: string }[] = [
+  { id: 'sd', label: 'SD (standard deviation)' },
+  { id: 'sem', label: 'SEM (standard error)' },
+  { id: 'ci95', label: '95% confidence interval' },
 ]
 
 const PRESETS: { id: StylePreset; label: string; hint: string }[] = [
@@ -42,10 +52,17 @@ export default function ChartStudio({ data }: Props) {
   const [trendline, setTrendline] = useState(false)
   const [showPoints, setShowPoints] = useState(true)
   const [showMean, setShowMean] = useState(true)
+  const [errorBars, setErrorBars] = useState<ErrorBars>('sd')
   const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<{ plotted: number; skipped: number; notes: string[] } | null>(null)
+  const [info, setInfo] = useState<{
+    plotted: number
+    skipped: number
+    notes: string[]
+    summary?: GroupSummary[]
+    caption?: string
+  } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
   const drawId = useRef(0)
 
@@ -70,16 +87,17 @@ export default function ChartStudio({ data }: Props) {
   useEffect(() => {
     const el = chartRef.current
     if (!plotly || !ds || !el) return
-    const dist = type === 'box' || type === 'violin'
+    const grouped = type === 'box' || type === 'violin' || type === 'bar'
     const cfg: ChartConfig = {
       type,
       x: sel.x,
       y: sel.y,
       z: type === 'scatter3d' ? sel.z : undefined,
-      color: !dist && sel.color ? sel.color : undefined,
-      group: dist && sel.group ? sel.group : undefined,
+      color: !grouped && sel.color ? sel.color : undefined,
+      group: grouped && sel.group ? sel.group : undefined,
       showPoints,
       showMean,
+      errorBars,
       preset,
       trendline: type === 'scatter' ? trendline : false,
     }
@@ -87,7 +105,7 @@ export default function ChartStudio({ data }: Props) {
     try {
       const fig = buildFigure(ds, cfg)
       setError(null)
-      setInfo({ plotted: fig.plotted, skipped: fig.skipped, notes: fig.notes })
+      setInfo({ plotted: fig.plotted, skipped: fig.skipped, notes: fig.notes, summary: fig.summary, caption: fig.caption })
       // Drawing can also fail later (e.g. 3D without WebGL); ignore failures from superseded draws.
       Promise.resolve(plotly.newPlot(el, fig.data, fig.layout, fig.config)).catch(() => {
         if (myDraw !== drawId.current) return
@@ -103,7 +121,7 @@ export default function ChartStudio({ data }: Props) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -150,7 +168,8 @@ export default function ChartStudio({ data }: Props) {
 
   const is3d = type === 'scatter3d'
   const isDist = type === 'box' || type === 'violin'
-  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isDist
+  const isGrouped = isDist || type === 'bar'
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isGrouped
     ? [{ key: 'y', label: 'Value' }]
     : is3d
       ? [
@@ -222,7 +241,7 @@ export default function ChartStudio({ data }: Props) {
               </select>
             </label>
           ))}
-          {isDist ? (
+          {isGrouped ? (
             <label className="block">
               <span className="text-xs text-gray-500">Group by (optional)</span>
               <select
@@ -271,8 +290,8 @@ export default function ChartStudio({ data }: Props) {
           </label>
         )}
 
-        {isDist && (
-          <div className="flex flex-wrap gap-6">
+        {isGrouped && (
+          <div className="flex flex-wrap items-center gap-6">
             <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
               <input
                 type="checkbox"
@@ -282,15 +301,33 @@ export default function ChartStudio({ data }: Props) {
               />
               Show individual points
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showMean}
-                onChange={(e) => setShowMean(e.target.checked)}
-                className="accent-green-500"
-              />
-              {type === 'box' ? 'Show mean ± SD' : 'Show mean line'}
-            </label>
+            {isDist && (
+              <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMean}
+                  onChange={(e) => setShowMean(e.target.checked)}
+                  className="accent-green-500"
+                />
+                {type === 'box' ? 'Show mean ± SD' : 'Show mean line'}
+              </label>
+            )}
+            {type === 'bar' && (
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span className="text-xs text-gray-500">Error bars</span>
+                <select
+                  value={errorBars}
+                  onChange={(e) => setErrorBars(e.target.value as ErrorBars)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+                >
+                  {ERROR_BAR_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -317,6 +354,7 @@ export default function ChartStudio({ data }: Props) {
               {info.plotted} points plotted
               {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
             </p>
+            {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
             {info.notes.map((n) => (
               <p key={n} className="text-xs text-yellow-400">
                 {n}
@@ -339,6 +377,36 @@ export default function ChartStudio({ data }: Props) {
               <Download size={14} /> SVG
             </button>
           </div>
+        </div>
+      )}
+
+      {info?.summary && info.summary.length > 0 && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 text-left">
+                {['Group', 'n', 'Mean', 'SD', 'SEM', '95% CI'].map((h) => (
+                  <th key={h} className="py-1 pr-4 font-normal">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {info.summary.map((r) => (
+                <tr key={r.group} className="border-t border-gray-800">
+                  <td className="py-1 pr-4 text-white">{r.group}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{r.n}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.mean)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.sd)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.sem)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">
+                    {r.ciLow === null || r.ciHigh === null ? '—' : `${formatStat(r.ciLow)} to ${formatStat(r.ciHigh)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
