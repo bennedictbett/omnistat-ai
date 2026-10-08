@@ -64,6 +64,8 @@ export default function ChartStudio({ data }: Props) {
   const [errorBars, setErrorBars] = useState<ErrorBars>('sd')
   const [histNorm, setHistNorm] = useState<HistNorm>('count')
   const [bins, setBins] = useState('') // empty = automatic
+  const [animateBy, setAnimateBy] = useState('') // empty = no animation
+  const [cumulative, setCumulative] = useState(false)
   const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -91,6 +93,7 @@ export default function ChartStudio({ data }: Props) {
   // New dataset: start from sensible columns.
   useEffect(() => {
     if (ds) setSel(defaultSelection(ds))
+    setAnimateBy('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetKey])
 
@@ -114,6 +117,8 @@ export default function ChartStudio({ data }: Props) {
       bins: bins !== '' && Number.isFinite(binCount) ? Math.min(MAX_BINS, Math.max(1, Math.floor(binCount))) : undefined,
       preset,
       trendline: type === 'scatter' ? trendline : false,
+      animateBy: type === 'scatter' && animateBy ? animateBy : undefined,
+      cumulative,
     }
     const myDraw = ++drawId.current
     try {
@@ -121,7 +126,7 @@ export default function ChartStudio({ data }: Props) {
       setError(null)
       setInfo({ plotted: fig.plotted, skipped: fig.skipped, notes: fig.notes, summary: fig.summary, caption: fig.caption })
       // Drawing can also fail later (e.g. 3D without WebGL); ignore failures from superseded draws.
-      Promise.resolve(plotly.newPlot(el, fig.data, fig.layout, fig.config)).catch(() => {
+      Promise.resolve(plotly.newPlot(el, { data: fig.data, layout: fig.layout, frames: fig.frames, config: fig.config })).catch(() => {
         if (myDraw !== drawId.current) return
         setInfo(null)
         setError(
@@ -135,7 +140,7 @@ export default function ChartStudio({ data }: Props) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -292,18 +297,50 @@ export default function ChartStudio({ data }: Props) {
               </select>
             </label>
           )}
+          {type === 'scatter' && (
+            <label className="block">
+              <span className="text-xs text-gray-500">Animate over (optional)</span>
+              <select value={animateBy} onChange={(e) => setAnimateBy(e.target.value)} className={selectClass}>
+                <option value="">None</option>
+                {ds.columns.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         {type === 'scatter' && (
-          <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
-            <input
-              type="checkbox"
-              checked={trendline}
-              onChange={(e) => setTrendline(e.target.checked)}
-              className="accent-green-500"
-            />
-            Add straight-line fit (with R²)
-          </label>
+          <div className="flex flex-wrap items-center gap-6">
+            <label
+              className={`flex items-center gap-2 text-sm w-fit ${
+                animateBy ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 cursor-pointer'
+              }`}
+              title={animateBy ? 'The fit line is not drawn while animating' : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={trendline && !animateBy}
+                disabled={!!animateBy}
+                onChange={(e) => setTrendline(e.target.checked)}
+                className="accent-green-500"
+              />
+              Add straight-line fit (with R²)
+            </label>
+            {animateBy && (
+              <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cumulative}
+                  onChange={(e) => setCumulative(e.target.checked)}
+                  className="accent-green-500"
+                />
+                Keep earlier points on screen
+              </label>
+            )}
+          </div>
         )}
 
         {isHist && (
@@ -392,7 +429,7 @@ export default function ChartStudio({ data }: Props) {
       <div
         ref={chartRef}
         className={`w-full rounded-lg overflow-hidden border border-gray-800 ${error ? 'hidden' : ''}`}
-        style={{ height: 520 }}
+        style={{ height: type === 'scatter' && animateBy ? 640 : 520 }}
       />
 
       {info && (
