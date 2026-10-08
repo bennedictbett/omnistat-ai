@@ -1,4 +1,4 @@
-import type { Config, Data, Layout, LayoutAxis } from 'plotly.js-dist-min'
+import type { Config, Data, Frame, Layout, LayoutAxis } from 'plotly.js-dist-min'
 
 // Pure functions that turn an uploaded dataset plus a few choices into a Plotly figure.
 // No React and no Plotly runtime in here, so everything is easy to test.
@@ -42,6 +42,10 @@ export interface ChartConfig {
   bins?: number
   /** Histogram only: bar heights as counts, percent of values, or density (default 'count') */
   histNorm?: HistNorm
+  /** 2D scatter only: a column to animate over. One frame per distinct value (sorted if numeric or a date). */
+  animateBy?: string
+  /** 2D scatter only: keep the points of earlier frames on screen as the animation advances (default false) */
+  cumulative?: boolean
 }
 
 export interface Figure {
@@ -57,6 +61,8 @@ export interface Figure {
   summary?: GroupSummary[]
   /** Bar charts: what the bars and error bars mean, for a figure legend */
   caption?: string
+  /** Animated charts: one frame per value of the animation column (the first frame is also in `data`) */
+  frames?: Partial<Frame>[]
 }
 
 /** An error whose message is safe to show to the user. */
@@ -372,6 +378,138 @@ function figureConfig(): Partial<Config> {
   }
 }
 
+
+// ---------- Animation ----------
+
+/** Most frames one animation may have; more makes the slider unusable and the chart heavy. */
+export const MAX_FRAMES = 200
+const FRAME_MS = 600
+const TRANSITION_MS = 300
+// Only strict year-first dates are treated as dates, because Date.parse also accepts odd text like "Group 1".
+const ISO_DATE = /^\d{4}[-/]\d{1,2}([-/]\d{1,2})?([T ].*)?$/
+
+/**
+ * Puts the distinct values of the animation column in playing order: numbers ascending,
+ * year-first dates chronologically, anything else in the order it first appears in the data.
+ * Numeric labels must already be normalised (String(number)).
+ */
+export function orderFrameLabels(labels: string[], numeric: boolean): string[] {
+  const uniq = Array.from(new Set(labels))
+  if (numeric) return uniq.sort((a, b) => Number(a) - Number(b))
+  if (uniq.length > 0 && uniq.every((l) => ISO_DATE.test(l))) {
+    const time = new Map(uniq.map((l) => [l, Date.parse(l.replace(/\//g, '-'))]))
+    if (Array.from(time.values()).every((v) => !Number.isNaN(v))) {
+      return uniq.sort((a, b) => (time.get(a) as number) - (time.get(b) as number))
+    }
+  }
+  return uniq
+}
+
+export interface AnimationFrame {
+  label: string
+  /** x and y values per group, in the same order as the chart's traces */
+  x: number[][]
+  y: number[][]
+}
+
+/** Splits the points into one frame per label. With `cumulative`, a frame also holds all earlier points. */
+export function buildFrames(
+  pts: { x: number; y: number; g: string; f: string }[],
+  names: string[],
+  labels: string[],
+  cumulative: boolean
+): AnimationFrame[] {
+  const groupIndex = new Map(names.map((n, i) => [n, i]))
+  const frameIndex = new Map(labels.map((l, i) => [l, i]))
+  const cells = labels.map(() => names.map(() => ({ x: [] as number[], y: [] as number[] })))
+  for (const p of pts) {
+    const cell = cells[frameIndex.get(p.f) as number][groupIndex.get(p.g) as number]
+    cell.x.push(p.x)
+    cell.y.push(p.y)
+  }
+  let runX: number[][] = names.map(() => [])
+  let runY: number[][] = names.map(() => [])
+  return labels.map((label, i) => {
+    if (!cumulative) return { label, x: cells[i].map((c) => c.x), y: cells[i].map((c) => c.y) }
+    // concat returns new arrays, so frames already handed out are never changed afterwards
+    runX = runX.map((a, g) => a.concat(cells[i][g].x))
+    runY = runY.map((a, g) => a.concat(cells[i][g].y))
+    return { label, x: [...runX], y: [...runY] }
+  })
+}
+
+/** Axis range that fits every frame, so the axes stay still while the points move. */
+function paddedRange(values: number[]): [number, number] {
+  let lo = Infinity
+  let hi = -Infinity
+  for (const v of values) {
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+  }
+  const span = hi - lo
+  const pad = span > 0 ? span * 0.05 : Math.abs(lo) * 0.05 || 1
+  return [lo - pad, hi + pad]
+}
+
+/** Play and Pause buttons plus a slider, drawn by Plotly itself. */
+function animationControls(frames: AnimationFrame[], column: string, t: Theme): Partial<Layout> {
+  const play = {
+    frame: { duration: FRAME_MS, redraw: false },
+    transition: { duration: TRANSITION_MS, easing: 'linear' },
+    fromcurrent: true,
+    mode: 'immediate',
+  }
+  const stop = { frame: { duration: 0, redraw: false }, transition: { duration: 0 }, mode: 'immediate' }
+  const hidden = 'rgba(0,0,0,0)'
+  // Past about a dozen frames the slider's own tick labels collide, so they are hidden;
+  // the label of the current frame is still shown above the slider.
+  const crowded = frames.length > 12
+  return {
+    updatemenus: [
+      {
+        type: 'buttons',
+        direction: 'left',
+        showactive: false,
+        x: 0,
+        xanchor: 'left',
+        y: 1,
+        yanchor: 'bottom',
+        pad: { b: 10 },
+        bgcolor: t.plot === hidden ? '#1f2937' : '#ffffff',
+        bordercolor: t.axisLine,
+        borderwidth: 1,
+        font: { color: t.text, size: t.fontSize },
+        buttons: [
+          { label: '▶ Play', method: 'animate', args: [null, play] },
+          { label: '❚❚ Pause', method: 'animate', args: [[null], stop] },
+        ],
+      },
+    ],
+    sliders: [
+      {
+        active: 0,
+        x: 0,
+        len: 1,
+        xanchor: 'left',
+        y: 0,
+        yanchor: 'top',
+        pad: { t: 90, b: 0 },
+        font: { color: crowded ? hidden : t.text, size: t.fontSize },
+        tickcolor: t.axisLine,
+        bgcolor: t.plot === hidden ? '#374151' : '#e5e7eb',
+        bordercolor: t.axisLine,
+        activebgcolor: t.palette[0],
+        currentvalue: { prefix: `${column}: `, xanchor: 'left', font: { color: t.text, size: t.fontSize } },
+        steps: frames.map((f) => ({
+          label: f.label,
+          method: 'animate',
+          args: [[f.label], { mode: 'immediate', frame: { duration: 0, redraw: false }, transition: { duration: 0 } }],
+        })),
+      },
+    ],
+  } as unknown as Partial<Layout>
+}
+
 // ---------- Figure ----------
 
 interface Point {
@@ -379,6 +517,8 @@ interface Point {
   y: number
   z: number
   g: string
+  /** Animation frame label (empty when not animating) */
+  f: string
 }
 
 function groupLabel(v: unknown): string {
@@ -702,6 +842,9 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
   }
 
   const t = THEMES[cfg.preset]
+  const animateBy = !is3d && cfg.animateBy ? cfg.animateBy : ''
+  if (animateBy && !ds.columns.includes(animateBy)) throw new ChartError(`Column "${animateBy}" is not in your data.`)
+  const animNumeric = animateBy !== '' && ds.numericCols.includes(animateBy)
   const pts: Point[] = []
   let skipped = 0
   for (const row of ds.rows) {
@@ -712,7 +855,25 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
       skipped++
       continue
     }
-    pts.push({ x, y, z, g: cfg.color ? groupLabel(row[cfg.color]) : '' })
+    let f = ''
+    if (animateBy) {
+      const raw = row[animateBy]
+      if (animNumeric) {
+        const n = toNumber(raw)
+        if (n === null) {
+          skipped++
+          continue
+        }
+        f = String(n)
+      } else {
+        f = raw === null || raw === undefined ? '' : String(raw).trim()
+        if (f === '') {
+          skipped++
+          continue
+        }
+      }
+    }
+    pts.push({ x, y, z, g: cfg.color ? groupLabel(row[cfg.color]) : '', f })
   }
   if (pts.length < 2) {
     throw new ChartError(
@@ -734,7 +895,24 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
   const names = Array.from(byGroup.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   const multi = names.length > 1
 
-  const useGL = !is3d && pts.length > GL_THRESHOLD
+  // Animation: one frame per value of the animation column.
+  let frames: AnimationFrame[] | null = null
+  let frameLabels: string[] = []
+  if (animateBy) {
+    frameLabels = orderFrameLabels(pts.map((p) => p.f), animNumeric)
+    if (frameLabels.length < 2) {
+      throw new ChartError(`"${animateBy}" has only one value in the plotted rows, so there is nothing to animate over.`)
+    }
+    if (frameLabels.length > MAX_FRAMES) {
+      throw new ChartError(
+        `"${animateBy}" has ${frameLabels.length} different values, which is more than the ${MAX_FRAMES} frames an animation can have. Choose a column with fewer values, such as a year instead of a full date.`
+      )
+    }
+    frames = buildFrames(pts, names, frameLabels, !!cfg.cumulative)
+  }
+
+  // The WebGL scatter cannot animate smoothly, so animated charts always use the standard one.
+  const useGL = !is3d && !frames && pts.length > GL_THRESHOLD
   const data: Data[] = []
 
   names.forEach((name, i) => {
@@ -762,8 +940,8 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
         type: useGL ? 'scattergl' : 'scatter',
         mode: 'markers',
         ...(name ? { name } : {}),
-        x: list.map((p) => p.x),
-        y: list.map((p) => p.y),
+        x: frames ? frames[0].x[i] : list.map((p) => p.x),
+        y: frames ? frames[0].y[i] : list.map((p) => p.y),
         marker,
         showlegend: multi,
       } as Data)
@@ -772,7 +950,8 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
 
   const notes: string[] = []
   let hasFitLines = false
-  if (!is3d && cfg.trendline) {
+  if (frames && cfg.trendline) notes.push('The straight-line fit is not drawn while animating. Set "Animate over" to None to see it.')
+  if (!is3d && cfg.trendline && !frames) {
     names.forEach((name, i) => {
       const list = byGroup.get(name) as Point[]
       const fit = linearFit(list.map((p) => p.x), list.map((p) => p.y))
@@ -824,6 +1003,13 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
     layout.yaxis = axisFor(cfg.y, t)
   }
 
+  if (frames) {
+    layout.xaxis = { ...layout.xaxis, range: paddedRange(pts.map((p) => p.x)), autorange: false }
+    layout.yaxis = { ...layout.yaxis, range: paddedRange(pts.map((p) => p.y)), autorange: false }
+    Object.assign(layout, animationControls(frames, animateBy, t))
+    layout.margin = { l: 70, r: 30, t: 60, b: 160 }
+  }
+
   return {
     data,
     layout,
@@ -832,5 +1018,13 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
     skipped,
     groups: names.length,
     notes,
+    ...(frames
+      ? {
+          frames: frames.map((f) => ({ name: f.label, data: f.x.map((x, i) => ({ x, y: f.y[i] })) })) as Partial<Frame>[],
+          caption:
+            `Animating over "${animateBy}": ${frames.length} frames, from ${frameLabels[0]} to ${frameLabels[frameLabels.length - 1]}` +
+            `${cfg.animateBy && cfg.cumulative ? ', keeping earlier points on screen' : ', one frame at a time'}. Use Play, or drag the slider.`,
+        }
+      : {}),
   }
 }
