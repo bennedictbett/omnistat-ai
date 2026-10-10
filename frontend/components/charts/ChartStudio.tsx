@@ -17,6 +17,8 @@ import {
   groupableColumns,
   toDataset,
 } from '@/lib/chartStudio'
+import FunctionPlotter from './FunctionPlotter'
+import { PRESETS, segClass, selectClass } from './chartStyles'
 
 type PlotlyApi = typeof import('plotly.js-dist-min')
 
@@ -46,18 +48,18 @@ const HIST_NORM_OPTIONS: { id: HistNorm; label: string }[] = [
   { id: 'density', label: 'Density' },
 ]
 
-const PRESETS: { id: StylePreset; label: string; hint: string }[] = [
-  { id: 'dark', label: 'Dark', hint: 'Matches the app' },
-  { id: 'graphpad', label: 'GraphPad style', hint: 'White, no grid, heavy axes: for papers and slides' },
-]
+interface DataProps extends Props {
+  preset: StylePreset
+  setPreset: (p: StylePreset) => void
+}
 
-export default function ChartStudio({ data }: Props) {
+/** Charts drawn from the uploaded data. */
+function DataCharts({ data, preset, setPreset }: DataProps) {
   const ds = useMemo(() => toDataset(data), [data])
   const datasetKey = ds ? ds.columns.join('|') : ''
   const groupable = useMemo(() => (ds ? groupableColumns(ds) : []), [ds])
 
   const [type, setType] = useState<ChartType>('scatter')
-  const [preset, setPreset] = useState<StylePreset>('dark')
   const [trendline, setTrendline] = useState(false)
   const [showPoints, setShowPoints] = useState(true)
   const [showMean, setShowMean] = useState(true)
@@ -203,23 +205,11 @@ export default function ChartStudio({ data }: Props) {
           { key: 'y', label: 'Y axis' },
         ]
 
-  const selectClass =
-    'mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500/50'
-  const segClass = (active: boolean) =>
-    `px-4 py-2 rounded-lg text-sm border transition-all ${
-      active
-        ? 'bg-green-500/10 text-green-400 border-green-500/20'
-        : 'text-gray-400 border-gray-700 hover:bg-gray-800 hover:text-white'
-    }`
-
   return (
     <div className="space-y-5 max-w-5xl">
-      <div>
-        <h2 className="text-lg font-semibold text-white">Chart Studio</h2>
-        <p className="text-xs text-gray-500 mt-1">
-          Build a chart from your uploaded data ({ds.rows.length} rows). Everything runs in your browser.
-        </p>
-      </div>
+      <p className="text-xs text-gray-500">
+        Build a chart from your uploaded data ({ds.rows.length} rows). Everything runs in your browser.
+      </p>
 
       <div className="rounded-lg border border-gray-800 bg-gray-900 p-5 space-y-5">
         <div className="flex flex-wrap gap-6">
@@ -426,11 +416,11 @@ export default function ChartStudio({ data }: Props) {
 
       {!plotly && !error && <p className="text-xs text-gray-500">Loading charting library…</p>}
 
-      <div
-        ref={chartRef}
-        className={`w-full rounded-lg overflow-hidden border border-gray-800 ${error ? 'hidden' : ''}`}
-        style={{ height: type === 'scatter' && animateBy ? 640 : 520 }}
-      />
+      {/* Plotly draws into the inner element, whose class and size never change: React rewriting its class would erase the
+          classes Plotly adds, and display:none would make Plotly measure a width of zero when it redraws after an error. */}
+      <div className={`w-full rounded-lg overflow-hidden border-gray-800 ${error ? 'h-0 border-0' : 'border'}`}>
+        <div ref={chartRef} className="w-full" style={{ height: type === 'scatter' && animateBy ? 640 : 520 }} />
+      </div>
 
       {info && (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -493,6 +483,39 @@ export default function ChartStudio({ data }: Props) {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  )
+}
+
+type Mode = 'data' | 'function'
+
+export default function ChartStudio({ data }: Props) {
+  const [mode, setMode] = useState<Mode>('data')
+  // The style choice is kept when switching between the two screens.
+  const [preset, setPreset] = useState<StylePreset>('dark')
+
+  return (
+    <div className="space-y-5 max-w-5xl">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Chart Studio</h2>
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => setMode('data')} className={segClass(mode === 'data')}>
+            From my data
+          </button>
+          <button
+            onClick={() => setMode('function')}
+            title="Type a formula such as sin(x) or x^2 + y^2. No data needed."
+            className={segClass(mode === 'function')}
+          >
+            Function plotter
+          </button>
+        </div>
+      </div>
+      {mode === 'data' ? (
+        <DataCharts data={data} preset={preset} setPreset={setPreset} />
+      ) : (
+        <FunctionPlotter preset={preset} setPreset={setPreset} />
       )}
     </div>
   )
