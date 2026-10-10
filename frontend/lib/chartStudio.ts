@@ -327,7 +327,7 @@ export function themeFor(preset: StylePreset): Theme {
   return THEMES[preset]
 }
 
-function axisFor(title: string, t: Theme): Partial<LayoutAxis> {
+export function axisFor(title: string, t: Theme): Partial<LayoutAxis> {
   const axis: Partial<LayoutAxis> = {
     title: { text: title, standoff: 12 },
     showline: true,
@@ -349,7 +349,7 @@ function axisFor(title: string, t: Theme): Partial<LayoutAxis> {
   return axis
 }
 
-function baseLayout(t: Theme, showLegend: boolean): Partial<Layout> {
+export function baseLayout(t: Theme, showLegend: boolean): Partial<Layout> {
   const layout: Partial<Layout> = {
     paper_bgcolor: t.paper,
     plot_bgcolor: t.plot,
@@ -363,6 +363,22 @@ function baseLayout(t: Theme, showLegend: boolean): Partial<Layout> {
   return layout
 }
 
+/** Styling of one axis of a 3D scene, shared by every 3D chart so they look alike. */
+export function sceneAxisFor(title: string, preset: StylePreset, t: Theme, extra: Record<string, unknown> = {}) {
+  return {
+    title: { text: title },
+    showline: true,
+    linecolor: t.axisLine,
+    linewidth: 2,
+    showgrid: true,
+    gridcolor: preset === 'graphpad' ? '#d1d5db' : '#374151',
+    zeroline: false,
+    showbackground: true,
+    backgroundcolor: preset === 'graphpad' ? '#ffffff' : '#111827',
+    ...extra,
+  }
+}
+
 function withAlpha(hex: string, alpha: number): string {
   const m = /^#([0-9a-f]{6})$/i.exec(hex)
   if (!m) return hex
@@ -370,7 +386,7 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
 }
 
-function figureConfig(): Partial<Config> {
+export function figureConfig(): Partial<Config> {
   return {
     responsive: true,
     displaylogo: false,
@@ -980,17 +996,7 @@ export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
   const layout: Partial<Layout> = baseLayout(t, showLegend)
 
   if (is3d) {
-    const sceneAxis = (title: string) => ({
-      title: { text: title },
-      showline: true,
-      linecolor: t.axisLine,
-      linewidth: 2,
-      showgrid: true,
-      gridcolor: cfg.preset === 'graphpad' ? '#d1d5db' : '#374151',
-      zeroline: false,
-      showbackground: true,
-      backgroundcolor: cfg.preset === 'graphpad' ? '#ffffff' : '#111827',
-    })
+    const sceneAxis = (title: string) => sceneAxisFor(title, cfg.preset, t)
     layout.scene = {
       xaxis: sceneAxis(cfg.x),
       yaxis: sceneAxis(cfg.y),
