@@ -12,13 +12,15 @@ export interface Dataset {
   rows: Record<string, unknown>[]
 }
 
-export type ChartType = 'scatter' | 'scatter3d' | 'histogram' | 'box' | 'violin' | 'bar'
+export type ChartType = 'scatter' | 'scatter3d' | 'line' | 'histogram' | 'heatmap' | 'box' | 'violin' | 'bar'
 
 /** What the error bars on a bar chart show */
 export type ErrorBars = 'sd' | 'sem' | 'ci95'
 export type StylePreset = 'dark' | 'graphpad'
 /** What the bar heights of a histogram show */
 export type HistNorm = 'count' | 'percent' | 'density'
+/** Straight-line (Pearson) or rank-based (Spearman) correlation */
+export type CorrMethod = 'pearson' | 'spearman'
 
 export interface ChartConfig {
   type: ChartType
@@ -46,6 +48,12 @@ export interface ChartConfig {
   animateBy?: string
   /** 2D scatter only: keep the points of earlier frames on screen as the animation advances (default false) */
   cumulative?: boolean
+  /** Line chart only: draw a marker at every data point (default true) */
+  markers?: boolean
+  /** Heatmap only: the numeric columns to compare (at least two) */
+  columns?: string[]
+  /** Heatmap only: Pearson or Spearman correlation (default 'pearson') */
+  corrMethod?: CorrMethod
 }
 
 export interface Figure {
@@ -120,8 +128,22 @@ export function defaultSelection(ds: Dataset): { x: string; y: string; z: string
     y: n[1] ?? n[0] ?? '',
     z: n[2] ?? n[1] ?? n[0] ?? '',
     color: '',
-    group: ds.categoricalCols[0] ?? '',
+    // The starting group has to be one the charts can use. A column of IDs or dates has dozens of different values,
+    // and starting on it would open Histogram, Box, Violin and Bar on an error instead of a chart.
+    group: ds.categoricalCols.find((c) => distinctCount(ds, c, MAX_HIST_GROUPS) <= MAX_HIST_GROUPS) ?? '',
   }
+}
+
+/** How many different values a column holds. Counting stops once it passes `cap`, so long columns stay cheap. */
+function distinctCount(ds: Dataset, col: string, cap: number): number {
+  const seen = new Set<string>()
+  for (const row of ds.rows) {
+    const v = row[col]
+    if (v === null || v === undefined || v === '') continue
+    seen.add(String(v))
+    if (seen.size > cap) break
+  }
+  return seen.size
 }
 
 // ---------- Numbers ----------
@@ -846,7 +868,343 @@ function buildHistogram(ds: Dataset, cfg: ChartConfig): Figure {
   }
 }
 
+// ---------- Line chart ----------
+
+export type XKind = 'number' | 'date' | 'category'
+
+/**
+ * How the x column of a line chart is read: numbers sort numerically, year-first dates sort by time,
+ * and anything else keeps the order in which its values first appear in the data.
+ */
+export function xAxisKind(ds: Dataset, col: string): XKind {
+  if (ds.numericCols.includes(col)) return 'number'
+  let seen = 0
+  for (const row of ds.rows) {
+    const v = row[col]
+    if (v === null || v === undefined || v === '') continue
+    const text = String(v).trim()
+    if (!ISO_DATE.test(text) || Number.isNaN(Date.parse(text.replace(/\//g, '-')))) return 'category'
+    seen++
+  }
+  return seen > 0 ? 'date' : 'category'
+}
+
+interface LinePoint {
+  /** What is drawn on the x axis (a number, or the date or category text) */
+  x: number | string
+  /** What the points are sorted by */
+  key: number
+  y: number
+  g: string
+}
+
+/** Line chart: the y values joined in order of x, one line per group when colouring. */
+function buildLine(ds: Dataset, cfg: ChartConfig): Figure {
+  if (!cfg.x || !cfg.y) throw new ChartError('Choose a column for every axis.')
+  for (const c of [cfg.x, cfg.y, ...(cfg.color ? [cfg.color] : [])]) {
+    if (!ds.columns.includes(c)) throw new ChartError(`Column "${c}" is not in your data.`)
+  }
+  const t = THEMES[cfg.preset]
+  const kind = xAxisKind(ds, cfg.x)
+
+  // Categories are ordered by first appearance across the whole file, so every line shares one order.
+  const categoryOrder = new Map<string, number>()
+  if (kind === 'category') {
+    for (const row of ds.rows) {
+      const v = row[cfg.x]
+      const label = v === null || v === undefined ? '' : String(v).trim()
+      if (label !== '' && !categoryOrder.has(label)) categoryOrder.set(label, categoryOrder.size)
+    }
+  }
+
+  const pts: LinePoint[] = []
+  let skipped = 0
+  for (const row of ds.rows) {
+    const y = toNumber(row[cfg.y])
+    const raw = row[cfg.x]
+    let x: number | string | null = null
+    let key: number | null = null
+    if (kind === 'number') {
+      key = toNumber(raw)
+      x = key
+    } else {
+      const label = raw === null || raw === undefined ? '' : String(raw).trim()
+      if (label !== '') {
+        if (kind === 'date') {
+          x = label.replace(/\//g, '-')
+          key = Date.parse(x)
+        } else {
+          x = label
+          key = categoryOrder.get(label) as number
+        }
+      }
+    }
+    if (y === null || x === null || key === null) {
+      skipped++
+      continue
+    }
+    pts.push({ x, key, y, g: cfg.color ? groupLabel(row[cfg.color]) : '' })
+  }
+  if (pts.length < 2) {
+    throw new ChartError(`Not enough values to draw a line (${pts.length}). Check that ${cfg.x} and ${cfg.y} contain values.`)
+  }
+
+  const byGroup = new Map<string, LinePoint[]>()
+  for (const p of pts) {
+    const list = byGroup.get(p.g)
+    if (list) list.push(p)
+    else byGroup.set(p.g, [p])
+  }
+  if (byGroup.size > MAX_GROUPS) {
+    throw new ChartError(
+      `"${cfg.color}" has ${byGroup.size} different values, which is too many for one line each. Choose a column with at most ${MAX_GROUPS}.`
+    )
+  }
+  const names = Array.from(byGroup.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const multi = names.length > 1
+  const markers = cfg.markers !== false
+  const useGL = pts.length > GL_THRESHOLD
+  const graphpad = cfg.preset === 'graphpad'
+
+  const notes: string[] = []
+  const repeated: string[] = []
+  const data: Data[] = names.map((name, i) => {
+    // Array.prototype.sort is stable, so points with the same x stay in the order of the file.
+    const list = (byGroup.get(name) as LinePoint[]).slice().sort((a, b) => a.key - b.key)
+    if (list.some((p, j) => j > 0 && p.key === list[j - 1].key)) repeated.push(name)
+    const colour = t.palette[i % t.palette.length]
+    return {
+      type: useGL ? 'scattergl' : 'scatter',
+      mode: markers ? 'lines+markers' : 'lines',
+      ...(name ? { name } : {}),
+      x: list.map((p) => p.x),
+      y: list.map((p) => p.y),
+      line: { color: colour, width: graphpad ? 2.5 : 2 },
+      marker: {
+        color: colour,
+        size: graphpad ? 8 : 6,
+        line: { width: graphpad ? 1 : 0, color: t.markerOutline },
+      },
+      showlegend: multi,
+      hovertemplate: `${cfg.x}: %{x}<br>${cfg.y}: %{y:.5g}<extra>${multi ? name : ''}</extra>`,
+    } as Data
+  })
+
+  if (repeated.length > 0) {
+    notes.push(
+      `${repeated.map((n) => (n ? `"${n}"` : 'The line')).join(', ')} ${repeated.length === 1 ? 'has' : 'have'} more than one value at the same ` +
+        `${cfg.x}, so the line steps up and down there. Colour by a column that tells the lines apart, or use Scatter.`
+    )
+  }
+  if (kind === 'category') {
+    notes.push(`${cfg.x} is not numbers or dates, so the points are joined in the order they appear in your file.`)
+  }
+
+  const layout = baseLayout(t, multi)
+  layout.xaxis = axisFor(cfg.x, t)
+  if (kind === 'date') layout.xaxis = { ...layout.xaxis, type: 'date' }
+  if (kind === 'category') {
+    layout.xaxis = { ...layout.xaxis, type: 'category', categoryorder: 'array', categoryarray: Array.from(categoryOrder.keys()) }
+  }
+  layout.yaxis = axisFor(cfg.y, t)
+
+  return {
+    data,
+    layout,
+    config: figureConfig(),
+    plotted: pts.length,
+    skipped,
+    groups: names.length,
+    notes,
+    caption:
+      `${cfg.y} joined in order of ${cfg.x}` +
+      `${cfg.color ? `, one line for each value of ${cfg.color}` : ''}` +
+      `${kind === 'date' ? ' (read as dates)' : ''}.`,
+  }
+}
+
+// ---------- Heatmap (correlation matrix) ----------
+
+/** Most columns one correlation heatmap can compare before the cells become unreadable. */
+export const MAX_HEATMAP_COLUMNS = 15
+
+/** Pearson correlation. Returns null when it is not defined: fewer than 3 pairs, or one side never changes. */
+export function correlation(xs: number[], ys: number[]): number | null {
+  const n = xs.length
+  if (n < 3 || n !== ys.length) return null
+  let mx = 0
+  let my = 0
+  for (let i = 0; i < n; i++) {
+    mx += xs[i]
+    my += ys[i]
+  }
+  mx /= n
+  my /= n
+  let sxx = 0
+  let syy = 0
+  let sxy = 0
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx
+    const dy = ys[i] - my
+    sxx += dx * dx
+    syy += dy * dy
+    sxy += dx * dy
+  }
+  if (sxx === 0 || syy === 0) return null
+  return Math.max(-1, Math.min(1, sxy / Math.sqrt(sxx * syy)))
+}
+
+/** Ranks from 1, with tied values sharing the average of the ranks they cover. */
+export function averageRanks(values: number[]): number[] {
+  const order = values.map((_, i) => i).sort((a, b) => values[a] - values[b])
+  const ranks = new Array<number>(values.length)
+  let i = 0
+  while (i < order.length) {
+    let j = i
+    while (j + 1 < order.length && values[order[j + 1]] === values[order[i]]) j++
+    const rank = (i + j) / 2 + 1
+    for (let k = i; k <= j; k++) ranks[order[k]] = rank
+    i = j + 1
+  }
+  return ranks
+}
+
+export interface CorrelationMatrix {
+  /** r[row][column]; null where the correlation is not defined */
+  r: (number | null)[][]
+  /** Number of rows that had both values, for each pair */
+  n: number[][]
+  /** Rows in which at least two of the chosen columns have a number */
+  rowsUsed: number
+}
+
+/** Correlation of every pair of columns, using the rows where both values are present (pairwise). */
+export function correlationMatrix(ds: Dataset, cols: string[], method: CorrMethod): CorrelationMatrix {
+  const data = cols.map((c) => ds.rows.map((row) => toNumber(row[c])))
+  const p = cols.length
+  const r: (number | null)[][] = Array.from({ length: p }, () => new Array<number | null>(p).fill(null))
+  const n: number[][] = Array.from({ length: p }, () => new Array<number>(p).fill(0))
+  for (let a = 0; a < p; a++) {
+    for (let b = a; b < p; b++) {
+      const xs: number[] = []
+      const ys: number[] = []
+      const da = data[a]
+      const db = data[b]
+      for (let i = 0; i < da.length; i++) {
+        const u = da[i]
+        const v = db[i]
+        if (u !== null && v !== null) {
+          xs.push(u)
+          ys.push(v)
+        }
+      }
+      // A column against itself is 1 whatever the method, so ranking it would only cost time.
+      const value = a === b || method === 'pearson' ? correlation(xs, ys) : correlation(averageRanks(xs), averageRanks(ys))
+      r[a][b] = r[b][a] = value
+      n[a][b] = n[b][a] = xs.length
+    }
+  }
+  let rowsUsed = 0
+  for (let i = 0; i < ds.rows.length; i++) {
+    let have = 0
+    for (let c = 0; c < p; c++) if (data[c][i] !== null) have++
+    if (have >= 2) rowsUsed++
+  }
+  return { r, n, rowsUsed }
+}
+
+/** Colours for r from -1 to +1: blue for negative, red for positive, and a neutral middle. */
+const CORR_SCALE: Record<StylePreset, [number, string][]> = {
+  dark: [[0, '#3b82f6'], [0.5, '#1f2937'], [1, '#ef4444']],
+  graphpad: [[0, '#2166ac'], [0.5, '#ffffff'], [1, '#b2182b']],
+}
+
+/** Heatmap of the correlation between every pair of chosen numeric columns. */
+function buildHeatmap(ds: Dataset, cfg: ChartConfig): Figure {
+  const cols = Array.from(new Set(cfg.columns ?? []))
+  for (const c of cols) {
+    if (!ds.numericCols.includes(c)) throw new ChartError(`Column "${c}" is not a numeric column.`)
+  }
+  if (cols.length < 2) throw new ChartError('Choose at least two numeric columns to compare.')
+  if (cols.length > MAX_HEATMAP_COLUMNS) {
+    throw new ChartError(`${cols.length} columns is too many to read as a heatmap. Choose at most ${MAX_HEATMAP_COLUMNS}.`)
+  }
+  const t = THEMES[cfg.preset]
+  const method: CorrMethod = cfg.corrMethod ?? 'pearson'
+  const symbol = method === 'spearman' ? 'ρ' : 'r'
+  const { r, n, rowsUsed } = correlationMatrix(ds, cols, method)
+  if (rowsUsed < 3) {
+    throw new ChartError('Fewer than 3 rows have numbers in two or more of these columns, so there is nothing to compare.')
+  }
+
+  const data: Data[] = [
+    {
+      type: 'heatmap',
+      x: cols,
+      y: cols,
+      z: r,
+      text: r.map((row) => row.map((v) => (v === null ? '' : v.toFixed(2)))),
+      texttemplate: '%{text}',
+      zmin: -1,
+      zmax: 1,
+      colorscale: CORR_SCALE[cfg.preset],
+      xgap: 2,
+      ygap: 2,
+      hoverongaps: false,
+      customdata: n,
+      hovertemplate: `%{y} and %{x}<br>${symbol} = %{z:.3f}<br>n = %{customdata}<extra></extra>`,
+      colorbar: { thickness: 14, len: 0.8, outlinewidth: 0, title: { text: symbol }, tickfont: { color: t.text, size: t.fontSize } },
+    } as Data,
+  ]
+
+  const notes: string[] = []
+  const constant = cols.filter((_, i) => r[i][i] === null)
+  if (constant.length > 0) {
+    notes.push(
+      `No correlation for ${constant.map((c) => `"${c}"`).join(', ')}: it has fewer than 3 values or the same value in every row.`
+    )
+  }
+  const undefinedPairs: string[] = []
+  let smallest = Infinity
+  for (let a = 0; a < cols.length; a++) {
+    for (let b = a + 1; b < cols.length; b++) {
+      if (r[a][a] !== null && r[b][b] !== null && r[a][b] === null) undefinedPairs.push(`"${cols[a]}" and "${cols[b]}"`)
+      if (r[a][b] !== null && n[a][b] < smallest) smallest = n[a][b]
+    }
+  }
+  if (undefinedPairs.length > 0) {
+    notes.push(
+      `No correlation for ${undefinedPairs.slice(0, 3).join(', ')}${undefinedPairs.length > 3 ? ` and ${undefinedPairs.length - 3} more` : ''}: ` +
+        'fewer than 3 rows have both values, or one of them does not change.'
+    )
+  }
+  if (smallest < 10) {
+    notes.push(`Some correlations rest on fewer than 10 rows (the smallest is ${smallest}), so they are not reliable.`)
+  }
+
+  const layout = baseLayout(t, false)
+  const axis = { ...axisFor('', t), type: 'category' as const, showline: false, ticks: '' as const }
+  layout.xaxis = axis
+  layout.yaxis = { ...axis, autorange: 'reversed' }
+  layout.margin = { l: 70, r: 30, t: 30, b: 60 }
+
+  return {
+    data,
+    layout,
+    config: figureConfig(),
+    plotted: rowsUsed,
+    skipped: ds.rows.length - rowsUsed,
+    groups: cols.length,
+    notes,
+    caption:
+      `${method === 'spearman' ? 'Spearman (rank)' : 'Pearson'} correlation (${symbol}) between each pair of columns, using the rows where both values are present. ` +
+      'Blue is negative, red is positive.',
+  }
+}
+
 export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
+  if (cfg.type === 'line') return buildLine(ds, cfg)
+  if (cfg.type === 'heatmap') return buildHeatmap(ds, cfg)
   if (cfg.type === 'histogram') return buildHistogram(ds, cfg)
   if (cfg.type === 'box' || cfg.type === 'violin') return buildDistribution(ds, cfg)
   if (cfg.type === 'bar') return buildBar(ds, cfg)

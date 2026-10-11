@@ -6,10 +6,12 @@ import {
   ChartConfig,
   ChartError,
   ChartType,
+  CorrMethod,
   ErrorBars,
   GroupSummary,
   HistNorm,
   MAX_BINS,
+  MAX_HEATMAP_COLUMNS,
   StylePreset,
   buildFigure,
   defaultSelection,
@@ -29,11 +31,18 @@ interface Props {
 
 const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: 'scatter', label: 'Scatter' },
+  { id: 'line', label: 'Line' },
   { id: 'scatter3d', label: '3D Scatter' },
   { id: 'histogram', label: 'Histogram' },
+  { id: 'heatmap', label: 'Heatmap' },
   { id: 'box', label: 'Box' },
   { id: 'violin', label: 'Violin' },
   { id: 'bar', label: 'Bar' },
+]
+
+const CORR_OPTIONS: { id: CorrMethod; label: string }[] = [
+  { id: 'pearson', label: 'Pearson (straight-line)' },
+  { id: 'spearman', label: 'Spearman (rank)' },
 ]
 
 const ERROR_BAR_OPTIONS: { id: ErrorBars; label: string }[] = [
@@ -68,6 +77,9 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   const [bins, setBins] = useState('') // empty = automatic
   const [animateBy, setAnimateBy] = useState('') // empty = no animation
   const [cumulative, setCumulative] = useState(false)
+  const [markers, setMarkers] = useState(true) // line chart: a point at every value
+  const [heatCols, setHeatCols] = useState<string[]>([]) // heatmap: the columns being compared
+  const [corrMethod, setCorrMethod] = useState<CorrMethod>('pearson')
   const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -94,7 +106,12 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
 
   // New dataset: start from sensible columns.
   useEffect(() => {
-    if (ds) setSel(defaultSelection(ds))
+    if (ds) {
+      setSel(defaultSelection(ds))
+      setHeatCols(ds.numericCols.slice(0, MAX_HEATMAP_COLUMNS))
+      // Dots at every value are fine for a few dozen rows and just clutter a long series.
+      setMarkers(ds.rows.length <= 200)
+    }
     setAnimateBy('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetKey])
@@ -121,6 +138,9 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
       trendline: type === 'scatter' ? trendline : false,
       animateBy: type === 'scatter' && animateBy ? animateBy : undefined,
       cumulative,
+      markers,
+      columns: heatCols,
+      corrMethod,
     }
     const myDraw = ++drawId.current
     try {
@@ -142,7 +162,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative, markers, heatCols, corrMethod])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -190,9 +210,13 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   const is3d = type === 'scatter3d'
   const isDist = type === 'box' || type === 'violin'
   const isHist = type === 'histogram'
+  const isLine = type === 'line'
+  const isHeat = type === 'heatmap'
   const isGrouped = isDist || type === 'bar'
   const usesGroup = isGrouped || isHist
-  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = usesGroup
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isHeat
+  ? []
+  : usesGroup
     ? [{ key: 'y', label: 'Value' }]
     : is3d
       ? [
@@ -235,7 +259,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${isHeat ? 'hidden' : ''}`}>
           {axisFields.map((f) => (
             <label key={f.key} className="block">
               <span className="text-xs text-gray-500">{f.label}</span>
@@ -244,7 +268,8 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
                 onChange={(e) => setSel((s) => ({ ...s, [f.key]: e.target.value }))}
                 className={selectClass}
               >
-                {ds.numericCols.map((c) => (
+                {/* a line chart can run along a date or a visit name as well as along numbers */}
+                {(isLine && f.key === 'x' ? ds.columns : ds.numericCols).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -270,7 +295,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
                   ))}
               </select>
             </label>
-          ) : (
+          ) : isHeat ? null : (
             <label className="block">
               <span className="text-xs text-gray-500">Colour by (optional)</span>
               <select
@@ -330,6 +355,83 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
                 Keep earlier points on screen
               </label>
             )}
+          </div>
+        )}
+
+        {isLine && (
+          <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+            <input
+              type="checkbox"
+              checked={markers}
+              onChange={(e) => setMarkers(e.target.checked)}
+              className="accent-green-500"
+            />
+            Show a point at every value
+          </label>
+        )}
+
+        {isHeat && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-6">
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span className="text-xs text-gray-500">Correlation</span>
+                <select
+                  value={corrMethod}
+                  onChange={(e) => setCorrMethod(e.target.value as CorrMethod)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+                >
+                  {CORR_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setHeatCols(ds.numericCols.slice(0, MAX_HEATMAP_COLUMNS))}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setHeatCols([])}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-2">
+                Columns to compare ({heatCols.length} chosen, up to {MAX_HEATMAP_COLUMNS})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ds.numericCols.map((c) => {
+                  const on = heatCols.includes(c)
+                  const full = !on && heatCols.length >= MAX_HEATMAP_COLUMNS
+                  return (
+                    <button
+                      key={c}
+                      aria-pressed={on}
+                      disabled={full}
+                      title={full ? `At most ${MAX_HEATMAP_COLUMNS} columns` : undefined}
+                      onClick={() =>
+                        // keep the columns in the order of the data, so the matrix does not reshuffle as you click
+                        setHeatCols(ds.numericCols.filter((n) => (n === c ? !on : heatCols.includes(n))))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        on
+                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                          : 'text-gray-400 border-gray-700 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -426,7 +528,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <p className="text-xs text-gray-500">
-              {info.plotted} {type === 'histogram' ? 'values' : 'points'} plotted
+              {type === 'heatmap' ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
               {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
             </p>
             {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
