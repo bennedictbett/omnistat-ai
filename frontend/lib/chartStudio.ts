@@ -21,6 +21,8 @@ export type StylePreset = 'dark' | 'graphpad'
 export type HistNorm = 'count' | 'percent' | 'density'
 /** Straight-line (Pearson) or rank-based (Spearman) correlation */
 export type CorrMethod = 'pearson' | 'spearman'
+/** What the heatmap shows: how columns relate to each other, or where the points of two columns pile up */
+export type HeatMode = 'correlation' | 'density'
 
 export interface ChartConfig {
   type: ChartType
@@ -54,6 +56,8 @@ export interface ChartConfig {
   columns?: string[]
   /** Heatmap only: Pearson or Spearman correlation (default 'pearson') */
   corrMethod?: CorrMethod
+  /** Heatmap only: 'correlation' between columns (default) or 'density' of the points of x and y. Density also uses bins and histNorm. */
+  heatMode?: HeatMode
 }
 
 export interface Figure {
@@ -1119,8 +1123,130 @@ const CORR_SCALE: Record<StylePreset, [number, string][]> = {
   graphpad: [[0, '#2166ac'], [0.5, '#ffffff'], [1, '#b2182b']],
 }
 
-/** Heatmap of the correlation between every pair of chosen numeric columns. */
+// ---------- Heatmap (density of two columns) ----------
+
+/** Automatic bins for a 2D grid stop at this many per axis, because a grid has the square of that many cells. */
+const MAX_AUTO_DENSITY_BINS = 40
+
+/** Position of the bin a value falls in. Compares against the same edges that are drawn, so a value on an edge is never put in the wrong cell. */
+function binIndex(v: number, plan: BinPlan): number {
+  const edge = (k: number) => plan.start + k * plan.size
+  let k = Math.floor((v - plan.start) / plan.size)
+  if (k < 0) k = 0
+  if (k > plan.count - 1) k = plan.count - 1
+  while (k > 0 && v < edge(k)) k--
+  while (k < plan.count - 1 && v >= edge(k + 1)) k++
+  return k
+}
+
+/** Counts the points in each cell of a grid: counts[row][column], one row per y bin and one column per x bin. */
+export function binPoints(xs: number[], ys: number[], xPlan: BinPlan, yPlan: BinPlan): number[][] {
+  const counts = Array.from({ length: yPlan.count }, () => new Array<number>(xPlan.count).fill(0))
+  for (let i = 0; i < xs.length; i++) counts[binIndex(ys[i], yPlan)][binIndex(xs[i], xPlan)]++
+  return counts
+}
+
+const DENSITY_SCALE: Record<StylePreset, [number, string][]> = {
+  dark: [[0, '#1e40af'], [0.4, '#22d3ee'], [0.7, '#4ade80'], [1, '#fde047']],
+  graphpad: [[0, '#d1d5db'], [1, '#111111']],
+}
+
+const DENSITY_WORDS: Record<HistNorm, { bar: string; words: string }> = {
+  count: { bar: 'Count', words: 'the number of rows in each cell' },
+  percent: { bar: 'Percent (%)', words: 'the percent of all rows in each cell' },
+  density: { bar: 'Density', words: 'the density of rows in each cell (the total volume is 1)' },
+}
+
+/** Heatmap of where the points of two numeric columns pile up: the plane is cut into cells and each cell is coloured by how many rows fall in it. */
+function buildDensity(ds: Dataset, cfg: ChartConfig): Figure {
+  if (!cfg.x || !cfg.y) throw new ChartError('Choose a column for X and for Y.')
+  for (const c of [cfg.x, cfg.y]) {
+    if (!ds.columns.includes(c)) throw new ChartError(`Column "${c}" is not in your data.`)
+    if (!ds.numericCols.includes(c)) throw new ChartError(`Column "${c}" is not a numeric column.`)
+  }
+  const t = THEMES[cfg.preset]
+  const norm: HistNorm = cfg.histNorm ?? 'count'
+  const xs: number[] = []
+  const ys: number[] = []
+  let skipped = 0
+  for (const row of ds.rows) {
+    const x = toNumber(row[cfg.x])
+    const y = toNumber(row[cfg.y])
+    if (x === null || y === null) {
+      skipped++
+      continue
+    }
+    xs.push(x)
+    ys.push(y)
+  }
+  if (xs.length < 3) throw new ChartError(`Not enough rows have numbers in both ${cfg.x} and ${cfg.y} (${xs.length}).`)
+
+  const fixed = cfg.bins && cfg.bins > 0 ? cfg.bins : 0
+  const plan = (values: number[]) => planBins(values, fixed || Math.min(MAX_AUTO_DENSITY_BINS, planBins(values).count))
+  const xPlan = plan(xs)
+  const yPlan = plan(ys)
+  const counts = binPoints(xs, ys, xPlan, yPlan)
+  const n = xs.length
+
+  const cell = (count: number): number | null => {
+    if (count === 0) return null // empty cells are left blank rather than painted as the lowest colour
+    if (norm === 'percent') return (100 * count) / n
+    if (norm === 'density') return count / (n * xPlan.size * yPlan.size)
+    return count
+  }
+  const xLo = (k: number) => xPlan.start + k * xPlan.size
+  const yLo = (k: number) => yPlan.start + k * yPlan.size
+  const z = counts.map((row) => row.map(cell))
+  const customdata = counts.map((row, j) => row.map((count, i) => [xLo(i), xLo(i + 1), yLo(j), yLo(j + 1), count]))
+
+  const data: Data[] = [
+    {
+      type: 'heatmap',
+      x: Array.from({ length: xPlan.count }, (_, i) => xLo(i) + xPlan.size / 2),
+      y: Array.from({ length: yPlan.count }, (_, j) => yLo(j) + yPlan.size / 2),
+      z,
+      zmin: 0,
+      colorscale: DENSITY_SCALE[cfg.preset],
+      xgap: Math.max(xPlan.count, yPlan.count) > 30 ? 0 : 1,
+      ygap: Math.max(xPlan.count, yPlan.count) > 30 ? 0 : 1,
+      hoverongaps: false,
+      customdata,
+      hovertemplate:
+        `${cfg.x}: %{customdata[0]:.4g} to %{customdata[1]:.4g}<br>${cfg.y}: %{customdata[2]:.4g} to %{customdata[3]:.4g}` +
+        '<br>rows: %{customdata[4]}<extra></extra>',
+      colorbar: { thickness: 14, len: 0.8, outlinewidth: 0, title: { text: DENSITY_WORDS[norm].bar }, tickfont: { color: t.text, size: t.fontSize } },
+      // Plotly accepts a small array for every cell here; its typings only describe one value per cell.
+    } as unknown as Data,
+  ]
+
+  const layout = baseLayout(t, false)
+  layout.xaxis = { ...axisFor(cfg.x, t), range: [xPlan.start, xPlan.end], autorange: false }
+  layout.yaxis = { ...axisFor(cfg.y, t), range: [yPlan.start, yPlan.end], autorange: false }
+
+  const notes: string[] = []
+  const cells = xPlan.count * yPlan.count
+  if (fixed && n < cells) {
+    notes.push(`There are only ${n} rows for ${cells} cells, so most cells are empty. Try fewer bins.`)
+  }
+  if (cfg.x === cfg.y) notes.push('X and Y are the same column, so every row falls on the diagonal.')
+
+  return {
+    data,
+    layout,
+    config: figureConfig(),
+    plotted: n,
+    skipped,
+    groups: 1,
+    notes,
+    caption:
+      `Each cell colours ${DENSITY_WORDS[norm].words}. ${xPlan.count} × ${yPlan.count} bins of ${formatStat(xPlan.size)} (${cfg.x}) by ` +
+      `${formatStat(yPlan.size)} (${cfg.y})${fixed ? '' : ', chosen automatically'}. Empty cells are left blank.`,
+  }
+}
+
+/** Heatmap of the correlation between every pair of chosen numeric columns, or the density of two columns. */
 function buildHeatmap(ds: Dataset, cfg: ChartConfig): Figure {
+  if (cfg.heatMode === 'density') return buildDensity(ds, cfg)
   const cols = Array.from(new Set(cfg.columns ?? []))
   for (const c of cols) {
     if (!ds.numericCols.includes(c)) throw new ChartError(`Column "${c}" is not a numeric column.`)

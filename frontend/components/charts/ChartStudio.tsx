@@ -10,6 +10,7 @@ import {
   ErrorBars,
   GroupSummary,
   HistNorm,
+  HeatMode,
   MAX_BINS,
   MAX_HEATMAP_COLUMNS,
   StylePreset,
@@ -80,6 +81,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   const [markers, setMarkers] = useState(true) // line chart: a point at every value
   const [heatCols, setHeatCols] = useState<string[]>([]) // heatmap: the columns being compared
   const [corrMethod, setCorrMethod] = useState<CorrMethod>('pearson')
+  const [heatMode, setHeatMode] = useState<HeatMode>('correlation')
   const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
   const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -141,6 +143,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
       markers,
       columns: heatCols,
       corrMethod,
+      heatMode,
     }
     const myDraw = ++drawId.current
     try {
@@ -162,7 +165,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
       setInfo(null)
       setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
     }
-  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative, markers, heatCols, corrMethod])
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative, markers, heatCols, corrMethod, heatMode])
 
   // Free the chart when leaving the tab.
   useEffect(() => {
@@ -212,9 +215,11 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   const isHist = type === 'histogram'
   const isLine = type === 'line'
   const isHeat = type === 'heatmap'
+  const isDensity = isHeat && heatMode === 'density'
+  const isCorr = isHeat && !isDensity
   const isGrouped = isDist || type === 'bar'
   const usesGroup = isGrouped || isHist
-  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isHeat
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isCorr
   ? []
   : usesGroup
     ? [{ key: 'y', label: 'Value' }]
@@ -259,7 +264,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
           </div>
         </div>
 
-        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${isHeat ? 'hidden' : ''}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${isCorr ? 'hidden' : ''}`}>
           {axisFields.map((f) => (
             <label key={f.key} className="block">
               <span className="text-xs text-gray-500">{f.label}</span>
@@ -371,6 +376,20 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
         )}
 
         {isHeat && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Heatmap shows</p>
+            <div className="flex gap-2">
+              <button onClick={() => setHeatMode('correlation')} className={segClass(heatMode === 'correlation')}>
+                Correlation
+              </button>
+              <button onClick={() => setHeatMode('density')} className={segClass(heatMode === 'density')}>
+                Density of two columns
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isCorr && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-6">
               <label className="flex items-center gap-2 text-sm text-gray-300">
@@ -435,7 +454,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
           </div>
         )}
 
-        {isHist && (
+        {(isHist || isDensity) && (
           <div className="flex flex-wrap items-center gap-6">
             <label className="flex items-center gap-2 text-sm text-gray-300">
               <span className="text-xs text-gray-500">Bins</span>
@@ -451,7 +470,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
               />
             </label>
             <label className="flex items-center gap-2 text-sm text-gray-300">
-              <span className="text-xs text-gray-500">Bar height</span>
+              <span className="text-xs text-gray-500">{isDensity ? 'Colour shows' : 'Bar height'}</span>
               <select
                 value={histNorm}
                 onChange={(e) => setHistNorm(e.target.value as HistNorm)}
@@ -528,7 +547,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <p className="text-xs text-gray-500">
-              {type === 'heatmap' ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
+              {isCorr ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
               {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
             </p>
             {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
