@@ -1,42 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server'
+// Draws LaTeX as SVG with MathJax. Loaded only when the Equations screen is opened.
+// SVG output with fontCache 'none' makes every formula self-contained, so it also
+// works offline (the desktop app) and when downloaded or copied as an image.
+// Only the base and ams TeX packages are loaded: no \href, \class or \style, so the
+// LaTeX that comes back from the server cannot add links or markup.
 
-// Server-side proxy for the equations endpoint.
-// The browser calls /api/math/run on THIS site; this route adds the secret API key and
-// forwards to the backend. OMNISTAT_API_KEY is a server-only env var: never name it
-// NEXT_PUBLIC_*, or Next.js will ship it to the browser.
+type Renderer = (tex: string, display: boolean) => string
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://omnistat-ai.onrender.com'
-const API_KEY = process.env.OMNISTAT_API_KEY
+let loading: Promise<Renderer> | null = null
 
-// Render's free tier can take a while to wake up; allow the function to wait for it.
-export const maxDuration = 30
-
-export async function POST(req: NextRequest) {
-  if (!API_KEY) {
-    return NextResponse.json({ detail: 'Server is not configured' }, { status: 503 })
-  }
-
-  // Vercel sets x-forwarded-for from the real connection, so the backend can rate-limit per user.
-  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-
-  try {
-    const upstream = await fetch(`${BACKEND_URL}/api/math/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-        'X-Client-IP': clientIp,
-      },
-      body: await req.text(),
-      signal: AbortSignal.timeout(25_000),
+export function loadMathJax(): Promise<Renderer> {
+  if (!loading) {
+    loading = (async () => {
+      const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }] = await Promise.all([
+        import('mathjax-full/js/mathjax.js'),
+        import('mathjax-full/js/input/tex.js'),
+        import('mathjax-full/js/output/svg.js'),
+        import('mathjax-full/js/adaptors/liteAdaptor.js'),
+        import('mathjax-full/js/handlers/html.js'),
+        import('mathjax-full/js/input/tex/base/BaseConfiguration.js'),
+        import('mathjax-full/js/input/tex/ams/AmsConfiguration.js'),
+      ])
+      const adaptor = liteAdaptor()
+      RegisterHTMLHandler(adaptor)
+      const doc = mathjax.document('', {
+        InputJax: new TeX({ packages: ['base', 'ams'] }),
+        OutputJax: new SVG({ fontCache: 'none' }),
+      })
+      return (tex: string, display: boolean) => {
+        const node = doc.convert(tex, { display })
+        return adaptor.outerHTML(node)
+      }
+    })()
+    // a failed load (for example a lost connection) can be retried next time
+    loading.catch(() => {
+      loading = null
     })
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const retryAfter = upstream.headers.get('retry-after')
-    if (retryAfter) headers['Retry-After'] = retryAfter
-
-    return new NextResponse(await upstream.text(), { status: upstream.status, headers })
-  } catch {
-    return NextResponse.json({ detail: 'Maths server unavailable, try again shortly' }, { status: 502 })
   }
+  return loading
 }
