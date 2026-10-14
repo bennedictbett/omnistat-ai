@@ -18,6 +18,8 @@ type PlotlyApi = typeof import('plotly.js-dist-min')
 interface Props {
   preset: StylePreset
   setPreset: (p: StylePreset) => void
+  /** Functions to start with, e.g. sent over from the Equations screen. */
+  seed?: string[]
 }
 
 interface Row {
@@ -82,9 +84,11 @@ function RangeField({
 }
 
 /** Draws functions typed as text: curves such as sin(x), and 3D surfaces such as x^2 + y^2. */
-export default function FunctionPlotter({ preset, setPreset }: Props) {
-  const nextId = useRef(2)
-  const [rows, setRows] = useState<Row[]>([{ id: 1, text: 'sin(x)' }])
+export default function FunctionPlotter({ preset, setPreset, seed }: Props) {
+  const nextId = useRef((seed?.length || 1) + 1)
+  const [rows, setRows] = useState<Row[]>(() =>
+    seed && seed.length ? seed.slice(0, MAX_FUNCTIONS).map((text, i) => ({ id: i + 1, text })) : [{ id: 1, text: 'sin(x)' }]
+  )
   const [range, setRange] = useState<RangeText>({ ...DEFAULT_RANGE, xMin: '-2pi', xMax: '2pi' })
   // The chart follows the text after a short pause, so it does not redraw on every key press.
   const [committed, setCommitted] = useState({ rows, range })

@@ -21,6 +21,7 @@ import {
   toDataset,
 } from '@/lib/chartStudio'
 import FunctionPlotter from './FunctionPlotter'
+import Equations from './Equations'
 import { PRESETS, segClass, selectClass } from './chartStyles'
 
 type PlotlyApi = typeof import('plotly.js-dist-min')
@@ -609,12 +610,14 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   )
 }
 
-type Mode = 'data' | 'function'
+type Mode = 'data' | 'function' | 'equations'
 
 export default function ChartStudio({ data }: Props) {
   const [mode, setMode] = useState<Mode>('data')
   // The style choice is kept when switching between the two screens.
   const [preset, setPreset] = useState<StylePreset>('dark')
+  // Functions sent over from the Equations screen to start the plotter with.
+  const [plotSeed, setPlotSeed] = useState<string[] | undefined>(undefined)
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -625,18 +628,35 @@ export default function ChartStudio({ data }: Props) {
             From my data
           </button>
           <button
-            onClick={() => setMode('function')}
+            onClick={() => {
+              setPlotSeed(undefined)
+              setMode('function')
+            }}
             title="Type a formula such as sin(x) or x^2 + y^2. No data needed."
             className={segClass(mode === 'function')}
           >
             Function plotter
           </button>
+          <button
+            onClick={() => setMode('equations')}
+            title="Differentiate, integrate, solve and simplify, with the working shown as typeset maths."
+            className={segClass(mode === 'equations')}
+          >
+            Equations
+          </button>
         </div>
       </div>
       {mode === 'data' ? (
         <DataCharts data={data} preset={preset} setPreset={setPreset} />
+      ) : mode === 'function' ? (
+        <FunctionPlotter preset={preset} setPreset={setPreset} seed={plotSeed} />
       ) : (
-        <FunctionPlotter preset={preset} setPreset={setPreset} />
+        <Equations
+          onPlot={(texts) => {
+            setPlotSeed(texts)
+            setMode('function')
+          }}
+        />
       )}
     </div>
   )
