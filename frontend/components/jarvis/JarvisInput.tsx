@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Brain, Send, Loader2, Play } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Brain, Send, Loader2, Play, Mic, Square } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { formatClock, joinText, MAX_SECONDS } from '@/lib/voiceInput'
+import { useVoiceInput } from './useVoiceInput'
 
 interface JarvisIntent {
   test: string
@@ -76,6 +78,15 @@ export default function JarvisInput() {
   const [running, setRunning] = useState(false)
   const [response, setResponse] = useState<JarvisResponse | null>(null)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Dictation fills the box; the person reads it and presses Send themselves.
+  const voice = useVoiceInput((text) => {
+    setQuery((q) => joinText(q, text))
+    inputRef.current?.focus()
+  })
+  const recording = voice.state === 'recording'
+  const transcribing = voice.state === 'transcribing'
 
   const handleSubmit = async () => {
     if (!query.trim()) return
@@ -163,13 +174,34 @@ export default function JarvisInput() {
       {/* Input */}
       <div className="flex gap-3">
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSubmit()
+            if (e.key === 'Escape' && voice.state !== 'idle') voice.cancel()
+          }}
           placeholder="e.g. Compare survival rates between treatment and control groups..."
           className="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 text-sm"
         />
+        {voice.supported && (
+          <button
+            type="button"
+            onClick={voice.toggle}
+            disabled={transcribing}
+            aria-label={recording ? 'Stop recording' : 'Speak your question'}
+            aria-pressed={recording}
+            title={recording ? 'Stop and write it down' : 'Speak your question'}
+            className={`px-4 py-3 rounded-lg border transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed ${
+              recording
+                ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                : 'bg-gray-900 border-gray-800 text-gray-300 hover:border-green-500/40 hover:text-white'
+            }`}
+          >
+            {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <Square size={18} /> : <Mic size={18} />}
+          </button>
+        )}
         <button
           onClick={handleSubmit}
           disabled={loading || !query.trim()}
@@ -177,6 +209,28 @@ export default function JarvisInput() {
         >
           {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
         </button>
+      </div>
+
+      {/* Voice status */}
+      <div className="min-h-[1.25rem] -mt-3" aria-live="polite">
+        {recording ? (
+          <p className="text-xs text-red-300 flex items-center gap-2" data-testid="voice-status">
+            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+            Listening… {formatClock(voice.seconds)} of {formatClock(MAX_SECONDS)}. Click the square to stop, Esc to cancel.
+          </p>
+        ) : transcribing ? (
+          <p className="text-xs text-gray-400" data-testid="voice-status">
+            Writing it down… (Esc to cancel)
+          </p>
+        ) : voice.error ? (
+          <p role="alert" className="text-xs text-red-400" data-testid="voice-error">
+            {voice.error}
+          </p>
+        ) : voice.supported ? (
+          <p className="text-xs text-gray-600">
+            Voice is sent to be turned into text and is not stored. Do not say patient names.
+          </p>
+        ) : null}
       </div>
 
       {/* Intent Response */}
@@ -343,5 +397,3 @@ export default function JarvisInput() {
     </div>
   )
 }
-
-
