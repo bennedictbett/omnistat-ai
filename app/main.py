@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import analytics, agent, math, r_analysis
+from app.api.routes import analytics, agent, math, r_analysis, voice
 
 app = FastAPI(
     title="OmniStat AI",
@@ -32,6 +32,12 @@ app.include_router(
     math.router,
     prefix="/api/math",
     tags=["Equations"]
+)
+
+app.include_router(
+    voice.router,
+    prefix="/api/voice",
+    tags=["Voice"]
 )
 
 app.include_router(
