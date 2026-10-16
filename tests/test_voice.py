@@ -170,6 +170,50 @@ def test_empty_speech_comes_back_as_empty_text(client, groq, webm):
     assert r.status_code == 200 and r.json()["text"] == ""
 
 
+# ---------- Whisper inventing text for silence ----------
+
+def _seg(text, no_speech=0.0, logprob=-0.2, ratio=1.2):
+    return {"text": text, "no_speech_prob": no_speech, "avg_logprob": logprob, "compression_ratio": ratio}
+
+
+def test_echo_of_the_hint_on_silence_is_dropped(client, groq, webm):
+    # what really happened: nobody spoke, and Whisper repeated the vocabulary hint
+    echo = "Clinical statistics in the background. Clinical statistics in the background. Clinical statistics, Bland-Altman, standard deviation, p-value, confidence, and p-value, confidence, and p-value."
+    groq.reply = {"text": echo, "language": "english", "duration": 4.0, "segments": [_seg(echo, no_speech=0.93, logprob=-0.4, ratio=3.1)]}
+    r = post(client, webm)
+    assert r.status_code == 200 and r.json()["text"] == ""
+
+
+def test_repeated_text_is_dropped_even_without_segment_scores(client, groq, webm):
+    groq.reply = {"text": "p-value, confidence, and p-value, confidence, and p-value, confidence, and p-value, confidence, and p-value.", "language": "english"}
+    assert post(client, webm).json()["text"] == ""
+
+
+def test_real_speech_with_a_silent_tail_keeps_only_the_speech(client, groq, webm):
+    groq.reply = {
+        "text": "Run a t-test Thank you.", "language": "english", "duration": 5,
+        "segments": [_seg(" Run a t-test", no_speech=0.02), _seg(" Thank you.", no_speech=0.85, logprob=-0.9)],
+    }
+    assert post(client, webm).json()["text"] == "Run a t-test"
+
+
+def test_unsure_but_audible_speech_is_kept(client, groq, webm):
+    # low confidence alone is not a reason to throw the words away
+    groq.reply = {"text": "Compare the two groups", "segments": [_seg("Compare the two groups", no_speech=0.1, logprob=-1.4)]}
+    assert post(client, webm).json()["text"] == "Compare the two groups"
+
+
+def test_likely_silence_with_low_confidence_is_dropped(client, groq, webm):
+    groq.reply = {"text": "Thanks for watching", "segments": [_seg("Thanks for watching", no_speech=0.7, logprob=-1.3)]}
+    assert post(client, webm).json()["text"] == ""
+
+
+def test_hint_is_a_plain_list_of_terms():
+    # a sentence-like prompt ("Clinical statistics dictation: ...") is what got echoed back
+    assert "dictation" not in tr.VOCAB_PROMPT.lower()
+    assert "Kaplan-Meier" in tr.VOCAB_PROMPT
+
+
 def test_very_long_text_is_cut(client, groq, webm):
     groq.reply = {"text": "word " * 2000}
     assert len(post(client, webm).json()["text"]) <= tr.MAX_TEXT_CHARS
