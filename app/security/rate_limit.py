@@ -4,6 +4,7 @@ Limits are read from env on every call (so they are easy to tune and to test):
   R_RATE_LIMIT_PER_MIN   per client (default 10)
   R_GLOBAL_RATE_PER_MIN  across all clients (default 60)
   MATH_RATE_LIMIT_PER_MIN / MATH_GLOBAL_RATE_PER_MIN  the same for the equations endpoint (30 / 200)
+  VOICE_RATE_LIMIT_PER_MIN / VOICE_GLOBAL_RATE_PER_MIN  the same for voice transcription (10 / 60)
 
 In-memory means each server process counts separately. That is fine for one
 instance; if you scale to several, move the counters to Redis.
@@ -82,4 +83,13 @@ async def rate_limit_math(request: Request, key_id: str = Depends(require_api_ke
         request, "math:",
         int(os.getenv("MATH_RATE_LIMIT_PER_MIN", "30")),
         int(os.getenv("MATH_GLOBAL_RATE_PER_MIN", "200")),
+    )
+
+
+async def rate_limit_voice(request: Request, key_id: str = Depends(require_api_key)) -> None:
+    """Each transcription costs money on Groq, so this is the tightest of the three."""
+    _enforce(
+        request, "voice:",
+        int(os.getenv("VOICE_RATE_LIMIT_PER_MIN", "10")),
+        int(os.getenv("VOICE_GLOBAL_RATE_PER_MIN", "60")),
     )
