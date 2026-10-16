@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import zlib
 from dataclasses import dataclass
 
 import httpx
@@ -34,13 +35,19 @@ MAX_TEXT_CHARS = 2_000
 DEFAULT_MODEL = "whisper-large-v3-turbo"
 
 # Whisper reads this as "what was said just before", which makes it far more likely to spell
-# statistics words correctly (and keeps "Kaplan-Meier" from becoming "caplan mayor").
+# statistics words correctly (and keeps "Kaplan-Meier" from becoming "caplan mayor"). Keep it a
+# plain list of terms: a sentence-like prompt is what Whisper repeats back when it hears silence.
 VOCAB_PROMPT = (
-    "Clinical statistics dictation: Kaplan-Meier survival curve, Cox proportional hazards, "
-    "log-rank test, Shapiro-Wilk normality test, Mann-Whitney U, Kruskal-Wallis, ANOVA, "
-    "paired t-test, Pearson and Spearman correlation, p-value, confidence interval, "
-    "odds ratio, hazard ratio, ROC curve, Bland-Altman, standard deviation."
+    "Kaplan-Meier, Cox regression, log-rank, Shapiro-Wilk, Mann-Whitney U, Kruskal-Wallis, "
+    "ANOVA, t-test, Spearman, p-value, confidence interval, odds ratio, hazard ratio, ROC, Bland-Altman."
 )
+
+# Whisper makes up text for silence and noise (often repeating the prompt). Its own per-segment
+# scores tell us when that happened; these are the usual thresholds from the Whisper paper.
+NO_SPEECH_SURE = 0.8      # at or above this, the segment is not speech
+NO_SPEECH_LIKELY = 0.6    # at or above this, together with a low confidence, it is not speech
+LOW_CONFIDENCE = -1.0     # average log-probability below this is low confidence
+MAX_COMPRESSION = 2.4     # text that compresses this well is the same words repeated
 
 # language codes Whisper accepts that we expose; anything else is auto-detected
 LANGUAGES = {"en", "sw", "fr", "es", "pt", "ar", "hi", "de"}
@@ -90,6 +97,42 @@ def _base_url() -> str:
 def _clean(text: str) -> str:
     text = " ".join(text.split())
     return text[:MAX_TEXT_CHARS]
+
+
+def _repetitive(text: str) -> bool:
+    """The same few words over and over, which is how Whisper fills silence."""
+    raw = text.strip().encode("utf-8")
+    if len(raw) < 60:
+        return False
+    return len(raw) / len(zlib.compress(raw)) > MAX_COMPRESSION
+
+
+def _num(value) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _is_speech(segment: dict) -> bool:
+    """False for a segment Whisper itself says is silence, noise or a loop."""
+    no_speech = _num(segment.get("no_speech_prob"))
+    logprob = _num(segment.get("avg_logprob"))
+    ratio = _num(segment.get("compression_ratio"))
+    if no_speech is not None and no_speech >= NO_SPEECH_SURE:
+        return False
+    if no_speech is not None and no_speech >= NO_SPEECH_LIKELY and logprob is not None and logprob < LOW_CONFIDENCE:
+        return False
+    if ratio is not None and ratio > MAX_COMPRESSION:
+        return False
+    return True
+
+
+def _speech_text(body: dict, text: str) -> str:
+    """The words that were really spoken. Uses Whisper's segments when it sent them, and
+    otherwise the plain text; either way a pure repetition is treated as no speech."""
+    segments = body.get("segments")
+    if isinstance(segments, list) and segments and all(isinstance(s, dict) for s in segments):
+        kept = [str(s.get("text") or "") for s in segments if _is_speech(s)]
+        text = " ".join(kept)
+    return "" if _repetitive(text) else text
 
 
 async def transcribe(audio: bytes, language: str | None = None, *, client: httpx.AsyncClient | None = None) -> Transcript:
@@ -158,9 +201,10 @@ async def transcribe(audio: bytes, language: str | None = None, *, client: httpx
 
     seconds = body.get("duration")
     lang = body.get("language")
-    logger.info("transcribed %d bytes (%s) in %.1fs", len(audio), fmt, elapsed)  # no text, no audio
+    spoken = _clean(_speech_text(body, text))
+    logger.info("transcribed %d bytes (%s) in %.1fs%s", len(audio), fmt, elapsed, "" if spoken else " (no speech)")  # no text, no audio
     return Transcript(
-        text=_clean(text),
+        text=spoken,
         language=lang if isinstance(lang, str) else None,
         seconds=float(seconds) if isinstance(seconds, (int, float)) else None,
     )
