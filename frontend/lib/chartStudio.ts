@@ -12,7 +12,7 @@ export interface Dataset {
   rows: Record<string, unknown>[]
 }
 
-export type ChartType = 'scatter' | 'scatter3d' | 'line' | 'histogram' | 'heatmap' | 'box' | 'violin' | 'bar'
+export type ChartType = 'scatter' | 'scatter3d' | 'surface' | 'line' | 'histogram' | 'heatmap' | 'box' | 'violin' | 'bar'
 
 /** What the error bars on a bar chart show */
 export type ErrorBars = 'sd' | 'sem' | 'ci95'
@@ -1328,9 +1328,214 @@ function buildHeatmap(ds: Dataset, cfg: ChartConfig): Figure {
   }
 }
 
+// ---------- 3D surface ----------
+
+/** Most grid cells per axis a surface can have: a surface has the square of this many cells. */
+export const MAX_SURFACE_GRID = 40
+/** Automatic grids stop here, which keeps the surface readable. */
+const MAX_AUTO_SURFACE_GRID = 25
+/** Rows drawn as dots over the surface; more than this are thinned so the chart stays fast. */
+export const MAX_SURFACE_POINTS = 5000
+
+export interface SurfaceGrid {
+  /** Where each column of the grid sits on the x axis (the middle of a bin, or the exact value) */
+  x: number[]
+  y: number[]
+  /** z[row][column]: the average of the rows in that cell, or null when no row falls in it */
+  z: (number | null)[][]
+  /** How many rows fell in each cell */
+  counts: number[][]
+  /** True when every distinct value of x and y became a grid line, instead of grouping values into bins */
+  exact: boolean
+  /** Cell edges for hover text (binned grids only) */
+  xEdges?: number[]
+  yEdges?: number[]
+}
+
+/** How many distinct values each axis may have to be used as the grid itself. */
+const EXACT_GRID_LIMIT = 25
+
+function distinctSorted(values: number[]): number[] {
+  return Array.from(new Set(values)).sort((a, b) => a - b)
+}
+
+/**
+ * Turns scattered (x, y, z) rows into a grid that a surface can be drawn on.
+ * When x and y each have few distinct values (a dose by time table, say) those values are the grid.
+ * Otherwise the x-y plane is cut into bins. Each cell holds the average z of its rows.
+ */
+export function surfaceGrid(xs: number[], ys: number[], zs: number[], requested?: number): SurfaceGrid {
+  const n = xs.length
+  const dx = distinctSorted(xs)
+  const dy = distinctSorted(ys)
+  const fixed = requested && requested > 0 ? Math.floor(requested) : 0
+
+  const cells = (rows: number, cols: number) => ({
+    sum: Array.from({ length: rows }, () => new Array<number>(cols).fill(0)),
+    counts: Array.from({ length: rows }, () => new Array<number>(cols).fill(0)),
+  })
+  const finish = (sum: number[][], counts: number[][]) =>
+    sum.map((row, j) => row.map((v, i) => (counts[j][i] === 0 ? null : v / counts[j][i])))
+
+  if (!fixed && dx.length >= 2 && dy.length >= 2 && dx.length <= EXACT_GRID_LIMIT && dy.length <= EXACT_GRID_LIMIT) {
+    const xi = new Map(dx.map((v, i) => [v, i]))
+    const yi = new Map(dy.map((v, j) => [v, j]))
+    const { sum, counts } = cells(dy.length, dx.length)
+    for (let r = 0; r < n; r++) {
+      const j = yi.get(ys[r]) as number
+      const i = xi.get(xs[r]) as number
+      sum[j][i] += zs[r]
+      counts[j][i]++
+    }
+    return { x: dx, y: dy, z: finish(sum, counts), counts, exact: true }
+  }
+
+  // Aim for about three rows per cell, so a small file does not turn into a grid that is mostly empty.
+  const auto = Math.max(3, Math.min(MAX_AUTO_SURFACE_GRID, Math.floor(Math.sqrt(n / 3))))
+  const count = Math.max(2, Math.min(MAX_SURFACE_GRID, fixed || auto))
+  const xPlan = planBins(xs, count)
+  const yPlan = planBins(ys, count)
+  const { sum, counts } = cells(yPlan.count, xPlan.count)
+  for (let r = 0; r < n; r++) {
+    const j = binIndex(ys[r], yPlan)
+    const i = binIndex(xs[r], xPlan)
+    sum[j][i] += zs[r]
+    counts[j][i]++
+  }
+  const centre = (plan: BinPlan) => Array.from({ length: plan.count }, (_, k) => plan.start + (k + 0.5) * plan.size)
+  const edges = (plan: BinPlan) => Array.from({ length: plan.count + 1 }, (_, k) => plan.start + k * plan.size)
+  return { x: centre(xPlan), y: centre(yPlan), z: finish(sum, counts), counts, exact: false, xEdges: edges(xPlan), yEdges: edges(yPlan) }
+}
+
+/** How many squares of four neighbouring cells all have data. Only those can be drawn as a piece of the surface. */
+export function drawableSquares(z: (number | null)[][]): number {
+  let n = 0
+  for (let j = 0; j + 1 < z.length; j++) {
+    for (let i = 0; i + 1 < z[j].length; i++) {
+      if (z[j][i] !== null && z[j][i + 1] !== null && z[j + 1][i] !== null && z[j + 1][i + 1] !== null) n++
+    }
+  }
+  return n
+}
+
+/** A surface of z over x and y from three numeric columns, optionally with the rows drawn as dots over it. */
+function buildSurface(ds: Dataset, cfg: ChartConfig): Figure {
+  const needed = [cfg.x, cfg.y, cfg.z ?? '']
+  if (needed.some((c) => !c)) throw new ChartError('Choose a column for X, Y and Z.')
+  for (const c of needed) {
+    if (!ds.columns.includes(c)) throw new ChartError(`Column "${c}" is not in your data.`)
+    if (!ds.numericCols.includes(c)) throw new ChartError(`Column "${c}" is not a numeric column.`)
+  }
+  const zCol = cfg.z as string
+  const t = THEMES[cfg.preset]
+  const xs: number[] = []
+  const ys: number[] = []
+  const zs: number[] = []
+  let skipped = 0
+  for (const row of ds.rows) {
+    const x = toNumber(row[cfg.x])
+    const y = toNumber(row[cfg.y])
+    const z = toNumber(row[zCol])
+    if (x === null || y === null || z === null) {
+      skipped++
+      continue
+    }
+    xs.push(x)
+    ys.push(y)
+    zs.push(z)
+  }
+  if (xs.length < 4) {
+    throw new ChartError(`Not enough rows have numbers in ${cfg.x}, ${cfg.y} and ${zCol} (${xs.length}). A surface needs at least 4.`)
+  }
+  if (new Set(xs).size < 2) throw new ChartError(`"${cfg.x}" has the same value in every row, so there is no surface to draw.`)
+  if (new Set(ys).size < 2) throw new ChartError(`"${cfg.y}" has the same value in every row, so there is no surface to draw.`)
+
+  const grid = surfaceGrid(xs, ys, zs, cfg.bins)
+  const squares = drawableSquares(grid.z)
+  const cellCount = grid.x.length * grid.y.length
+  const filled = grid.counts.reduce((a, row) => a + row.filter((c) => c > 0).length, 0)
+  if (squares === 0) {
+    throw new ChartError(
+      `The rows are too spread out to form a surface: no two neighbouring cells both contain data (${filled} of ${cellCount} cells have rows). ` +
+        (grid.exact ? 'Try different columns.' : 'Try fewer grid cells.')
+    )
+  }
+
+  const showPoints = cfg.showPoints !== false
+  const hover = `${cfg.x}: %{x:.4g}<br>${cfg.y}: %{y:.4g}<br>average ${zCol}: %{z:.4g}<br>rows: %{customdata}<extra></extra>`
+
+  const data: Data[] = [
+    {
+      type: 'surface',
+      x: grid.x,
+      y: grid.y,
+      z: grid.z,
+      customdata: grid.counts,
+      colorscale: DENSITY_SCALE[cfg.preset],
+      connectgaps: false,
+      hovertemplate: hover,
+      showscale: true,
+      colorbar: { thickness: 14, len: 0.7, outlinewidth: 0, title: { text: zCol }, tickfont: { color: t.text, size: t.fontSize } },
+    } as unknown as Data,
+  ]
+
+  const notes: string[] = []
+  let stride = 1
+  if (showPoints) {
+    stride = Math.max(1, Math.ceil(xs.length / MAX_SURFACE_POINTS))
+    const pick = <T>(a: T[]) => (stride === 1 ? a : a.filter((_, i) => i % stride === 0))
+    data.push({
+      type: 'scatter3d',
+      mode: 'markers',
+      name: 'Rows',
+      x: pick(xs),
+      y: pick(ys),
+      z: pick(zs),
+      marker: { size: 2.5, color: cfg.preset === 'graphpad' ? '#111111' : '#f9fafb', opacity: 0.85 },
+      hovertemplate: `${cfg.x}: %{x:.4g}<br>${cfg.y}: %{y:.4g}<br>${zCol}: %{z:.4g}<extra>row</extra>`,
+      showlegend: false,
+    } as Data)
+    if (stride > 1) notes.push(`Showing every ${stride === 2 ? 'second' : `${stride}th`} row as a dot, so the chart stays fast. The surface uses all rows.`)
+  }
+
+  if (filled < cellCount) {
+    const empty = cellCount - filled
+    notes.push(
+      `${empty} of ${cellCount} cells have no rows, so the surface has gaps there.` +
+        (grid.exact ? '' : ' Fewer grid cells fill more of them.')
+    )
+  }
+  const single = grid.counts.reduce((a, row) => a + row.filter((c) => c === 1).length, 0)
+  if (!grid.exact && single > 0 && single >= filled / 2) {
+    notes.push(`${single} cells rest on a single row, so the surface follows individual values there rather than an average.`)
+  }
+  if (xs.length < 20) notes.push(`Only ${xs.length} rows: a surface from so few rows says little about the shape of the data.`)
+
+  const layout: Partial<Layout> = baseLayout(t, false)
+  const sceneAxis = (title: string) => sceneAxisFor(title, cfg.preset, t)
+  layout.scene = { xaxis: sceneAxis(cfg.x), yaxis: sceneAxis(cfg.y), zaxis: sceneAxis(zCol) } as Layout['scene']
+  layout.margin = { l: 0, r: 0, t: 10, b: 0 }
+  delete layout.plot_bgcolor
+
+  const how = grid.exact
+    ? `Each grid line is a distinct value of ${cfg.x} or ${cfg.y}.`
+    : `The plane is cut into ${grid.x.length} × ${grid.y.length} cells${cfg.bins && cfg.bins > 0 ? '' : ' (chosen from the number of rows)'}.`
+  return {
+    data,
+    layout,
+    config: figureConfig(),
+    plotted: xs.length,
+    skipped,
+    groups: 1,
+    notes,
+    caption: `Height and colour show the average ${zCol} of the rows in each cell. ${how} Drag to rotate, scroll to zoom.${showPoints ? ' Dots are the rows.' : ''}`,
+  }
+}
+
 export function buildFigure(ds: Dataset, cfg: ChartConfig): Figure {
   if (cfg.type === 'line') return buildLine(ds, cfg)
   if (cfg.type === 'heatmap') return buildHeatmap(ds, cfg)
+  if (cfg.type === 'surface') return buildSurface(ds, cfg)
   if (cfg.type === 'histogram') return buildHistogram(ds, cfg)
   if (cfg.type === 'box' || cfg.type === 'violin') return buildDistribution(ds, cfg)
   if (cfg.type === 'bar') return buildBar(ds, cfg)
