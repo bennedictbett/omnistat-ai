@@ -13,6 +13,7 @@ import {
   HeatMode,
   MAX_BINS,
   MAX_HEATMAP_COLUMNS,
+  MAX_SURFACE_GRID,
   StylePreset,
   buildFigure,
   defaultSelection,
@@ -35,6 +36,7 @@ const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: 'scatter', label: 'Scatter' },
   { id: 'line', label: 'Line' },
   { id: 'scatter3d', label: '3D Scatter' },
+  { id: 'surface', label: '3D Surface' },
   { id: 'histogram', label: 'Histogram' },
   { id: 'heatmap', label: 'Heatmap' },
   { id: 'box', label: 'Box' },
@@ -129,14 +131,17 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
       type,
       x: sel.x,
       y: sel.y,
-      z: type === 'scatter3d' ? sel.z : undefined,
+      z: type === 'scatter3d' || type === 'surface' ? sel.z : undefined,
       color: !grouped && sel.color ? sel.color : undefined,
       group: grouped && sel.group ? sel.group : undefined,
       showPoints,
       showMean,
       errorBars,
       histNorm,
-      bins: bins !== '' && Number.isFinite(binCount) ? Math.min(MAX_BINS, Math.max(1, Math.floor(binCount))) : undefined,
+      bins:
+        bins !== '' && Number.isFinite(binCount)
+          ? Math.min(type === 'surface' ? MAX_SURFACE_GRID : MAX_BINS, Math.max(1, Math.floor(binCount)))
+          : undefined,
       preset,
       trendline: type === 'scatter' ? trendline : false,
       animateBy: type === 'scatter' && animateBy ? animateBy : undefined,
@@ -156,7 +161,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
         if (myDraw !== drawId.current) return
         setInfo(null)
         setError(
-          type === 'scatter3d'
+          type === 'scatter3d' || type === 'surface'
             ? 'Your browser could not draw this 3D chart. Check that WebGL (hardware acceleration) is enabled, or try the 2D scatter.'
             : 'Your browser could not draw this chart.'
         )
@@ -211,7 +216,8 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
     )
   }
 
-  const is3d = type === 'scatter3d'
+  const isSurface = type === 'surface'
+  const is3d = type === 'scatter3d' || isSurface // both are drawn in a 3D scene
   const isDist = type === 'box' || type === 'violin'
   const isHist = type === 'histogram'
   const isLine = type === 'line'
@@ -301,7 +307,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
                   ))}
               </select>
             </label>
-          ) : isHeat ? null : (
+          ) : isHeat || isSurface ? null : (
             <label className="block">
               <span className="text-xs text-gray-500">Colour by (optional)</span>
               <select
@@ -374,6 +380,34 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
             />
             Show a point at every value
           </label>
+        )}
+
+        {isSurface && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">Grid cells per axis</span>
+              <input
+                type="number"
+                min={2}
+                max={MAX_SURFACE_GRID}
+                step={1}
+                value={bins}
+                placeholder="Auto"
+                onChange={(e) => setBins(e.target.value)}
+                aria-label="Grid cells per axis"
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPoints}
+                onChange={(e) => setShowPoints(e.target.checked)}
+                className="accent-green-500"
+              />
+              Show the rows as dots
+            </label>
+          </div>
         )}
 
         {isHeat && (
@@ -548,7 +582,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <p className="text-xs text-gray-500">
-              {isCorr ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
+              {isCorr || isSurface ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
               {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
             </p>
             {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
