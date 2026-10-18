@@ -1,0 +1,697 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, Download, Upload } from 'lucide-react'
+import {
+  ChartConfig,
+  ChartError,
+  ChartType,
+  CorrMethod,
+  ErrorBars,
+  GroupSummary,
+  HistNorm,
+  HeatMode,
+  MAX_BINS,
+  MAX_HEATMAP_COLUMNS,
+  MAX_SURFACE_GRID,
+  StylePreset,
+  buildFigure,
+  defaultSelection,
+  formatStat,
+  groupableColumns,
+  toDataset,
+} from '@/lib/chartStudio'
+import FunctionPlotter from './FunctionPlotter'
+import Equations from './Equations'
+import { PRESETS, segClass, selectClass } from './chartStyles'
+
+type PlotlyApi = typeof import('plotly.js-dist-min')
+
+interface Props {
+  /** The object the Upload tab saved (columns, numeric_cols, categorical_cols, full_data) */
+  data: unknown
+}
+
+const CHART_TYPES: { id: ChartType; label: string }[] = [
+  { id: 'scatter', label: 'Scatter' },
+  { id: 'line', label: 'Line' },
+  { id: 'scatter3d', label: '3D Scatter' },
+  { id: 'surface', label: '3D Surface' },
+  { id: 'histogram', label: 'Histogram' },
+  { id: 'heatmap', label: 'Heatmap' },
+  { id: 'box', label: 'Box' },
+  { id: 'violin', label: 'Violin' },
+  { id: 'bar', label: 'Bar' },
+]
+
+const CORR_OPTIONS: { id: CorrMethod; label: string }[] = [
+  { id: 'pearson', label: 'Pearson (straight-line)' },
+  { id: 'spearman', label: 'Spearman (rank)' },
+]
+
+const ERROR_BAR_OPTIONS: { id: ErrorBars; label: string }[] = [
+  { id: 'sd', label: 'SD (standard deviation)' },
+  { id: 'sem', label: 'SEM (standard error)' },
+  { id: 'ci95', label: '95% confidence interval' },
+]
+
+const HIST_NORM_OPTIONS: { id: HistNorm; label: string }[] = [
+  { id: 'count', label: 'Count' },
+  { id: 'percent', label: 'Percent' },
+  { id: 'density', label: 'Density' },
+]
+
+interface DataProps extends Props {
+  preset: StylePreset
+  setPreset: (p: StylePreset) => void
+}
+
+/** Charts drawn from the uploaded data. */
+function DataCharts({ data, preset, setPreset }: DataProps) {
+  const ds = useMemo(() => toDataset(data), [data])
+  const datasetKey = ds ? ds.columns.join('|') : ''
+  const groupable = useMemo(() => (ds ? groupableColumns(ds) : []), [ds])
+
+  const [type, setType] = useState<ChartType>('scatter')
+  const [trendline, setTrendline] = useState(false)
+  const [showPoints, setShowPoints] = useState(true)
+  const [showMean, setShowMean] = useState(true)
+  const [errorBars, setErrorBars] = useState<ErrorBars>('sd')
+  const [histNorm, setHistNorm] = useState<HistNorm>('count')
+  const [bins, setBins] = useState('') // empty = automatic
+  const [animateBy, setAnimateBy] = useState('') // empty = no animation
+  const [cumulative, setCumulative] = useState(false)
+  const [markers, setMarkers] = useState(true) // line chart: a point at every value
+  const [heatCols, setHeatCols] = useState<string[]>([]) // heatmap: the columns being compared
+  const [corrMethod, setCorrMethod] = useState<CorrMethod>('pearson')
+  const [heatMode, setHeatMode] = useState<HeatMode>('correlation')
+  const [sel, setSel] = useState({ x: '', y: '', z: '', color: '', group: '' })
+  const [plotly, setPlotly] = useState<PlotlyApi | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<{
+    plotted: number
+    skipped: number
+    notes: string[]
+    summary?: GroupSummary[]
+    caption?: string
+  } | null>(null)
+  const chartRef = useRef<HTMLDivElement>(null)
+  const drawId = useRef(0)
+
+  // Load Plotly only when this tab is opened (it is a large library).
+  useEffect(() => {
+    let cancelled = false
+    import('plotly.js-dist-min').then((mod) => {
+      if (!cancelled) setPlotly(((mod as unknown as { default?: PlotlyApi }).default ?? mod) as PlotlyApi)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // New dataset: start from sensible columns.
+  useEffect(() => {
+    if (ds) {
+      setSel(defaultSelection(ds))
+      setHeatCols(ds.numericCols.slice(0, MAX_HEATMAP_COLUMNS))
+      // Dots at every value are fine for a few dozen rows and just clutter a long series.
+      setMarkers(ds.rows.length <= 200)
+    }
+    setAnimateBy('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasetKey])
+
+  // Draw whenever the data or any choice changes.
+  useEffect(() => {
+    const el = chartRef.current
+    if (!plotly || !ds || !el) return
+    const grouped = type === 'box' || type === 'violin' || type === 'bar' || type === 'histogram'
+    const binCount = Number(bins)
+    const cfg: ChartConfig = {
+      type,
+      x: sel.x,
+      y: sel.y,
+      z: type === 'scatter3d' || type === 'surface' ? sel.z : undefined,
+      color: !grouped && sel.color ? sel.color : undefined,
+      group: grouped && sel.group ? sel.group : undefined,
+      showPoints,
+      showMean,
+      errorBars,
+      histNorm,
+      bins:
+        bins !== '' && Number.isFinite(binCount)
+          ? Math.min(type === 'surface' ? MAX_SURFACE_GRID : MAX_BINS, Math.max(1, Math.floor(binCount)))
+          : undefined,
+      preset,
+      trendline: type === 'scatter' ? trendline : false,
+      animateBy: type === 'scatter' && animateBy ? animateBy : undefined,
+      cumulative,
+      markers,
+      columns: heatCols,
+      corrMethod,
+      heatMode,
+    }
+    const myDraw = ++drawId.current
+    try {
+      const fig = buildFigure(ds, cfg)
+      setError(null)
+      setInfo({ plotted: fig.plotted, skipped: fig.skipped, notes: fig.notes, summary: fig.summary, caption: fig.caption })
+      // Drawing can also fail later (e.g. 3D without WebGL); ignore failures from superseded draws.
+      Promise.resolve(plotly.newPlot(el, { data: fig.data, layout: fig.layout, frames: fig.frames, config: fig.config })).catch(() => {
+        if (myDraw !== drawId.current) return
+        setInfo(null)
+        setError(
+          type === 'scatter3d' || type === 'surface'
+            ? 'Your browser could not draw this 3D chart. Check that WebGL (hardware acceleration) is enabled, or try the 2D scatter.'
+            : 'Your browser could not draw this chart.'
+        )
+      })
+    } catch (e) {
+      plotly.purge(el)
+      setInfo(null)
+      setError(e instanceof ChartError ? e.message : 'Could not draw this chart.')
+    }
+  }, [plotly, ds, type, sel, preset, trendline, showPoints, showMean, errorBars, histNorm, bins, animateBy, cumulative, markers, heatCols, corrMethod, heatMode])
+
+  // Free the chart when leaving the tab.
+  useEffect(() => {
+    const el = chartRef.current
+    return () => {
+      if (plotly && el) plotly.purge(el)
+    }
+  }, [plotly])
+
+  const download = (format: 'png' | 'svg') => {
+    if (!plotly || !chartRef.current) return
+    plotly.downloadImage(chartRef.current, {
+      format,
+      filename: 'omnistat-chart',
+      width: 1200,
+      height: 800,
+      scale: format === 'png' ? 2 : 1,
+    })
+  }
+
+  if (!ds) {
+    return (
+      <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-5 flex items-start gap-3 max-w-2xl">
+        <Upload size={18} className="text-yellow-400 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-yellow-400">Upload your data first</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Chart Studio draws from your own file. Open <span className="text-white">Upload Data</span> in the
+            sidebar, add a CSV or Excel file, then come back.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (ds.numericCols.length === 0) {
+    return (
+      <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-5 max-w-2xl">
+        <p className="text-sm font-medium text-yellow-400">No numeric columns found</p>
+        <p className="text-xs text-gray-400 mt-1">Charts need at least one column of numbers.</p>
+      </div>
+    )
+  }
+
+  const isSurface = type === 'surface'
+  const is3d = type === 'scatter3d' || isSurface // both are drawn in a 3D scene
+  const isDist = type === 'box' || type === 'violin'
+  const isHist = type === 'histogram'
+  const isLine = type === 'line'
+  const isHeat = type === 'heatmap'
+  const isDensity = isHeat && heatMode === 'density'
+  const isCorr = isHeat && !isDensity
+  const isGrouped = isDist || type === 'bar'
+  const usesGroup = isGrouped || isHist
+  const axisFields: { key: 'x' | 'y' | 'z'; label: string }[] = isCorr
+  ? []
+  : usesGroup
+    ? [{ key: 'y', label: 'Value' }]
+    : is3d
+      ? [
+          { key: 'x', label: 'X axis' },
+          { key: 'y', label: 'Y axis' },
+          { key: 'z', label: 'Z axis' },
+        ]
+      : [
+          { key: 'x', label: 'X axis' },
+          { key: 'y', label: 'Y axis' },
+        ]
+
+  return (
+    <div className="space-y-5 max-w-5xl">
+      <p className="text-xs text-gray-500">
+        Build a chart from your uploaded data ({ds.rows.length} rows). Everything runs in your browser.
+      </p>
+
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-5 space-y-5">
+        <div className="flex flex-wrap gap-6">
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Chart type</p>
+            <div className="flex gap-2">
+              {CHART_TYPES.map((c) => (
+                <button key={c.id} onClick={() => setType(c.id)} className={segClass(type === c.id)}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Style</p>
+            <div className="flex gap-2">
+              {PRESETS.map((p) => (
+                <button key={p.id} onClick={() => setPreset(p.id)} title={p.hint} className={segClass(preset === p.id)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${isCorr ? 'hidden' : ''}`}>
+          {axisFields.map((f) => (
+            <label key={f.key} className="block">
+              <span className="text-xs text-gray-500">{f.label}</span>
+              <select
+                value={sel[f.key]}
+                onChange={(e) => setSel((s) => ({ ...s, [f.key]: e.target.value }))}
+                className={selectClass}
+              >
+                {/* a line chart can run along a date or a visit name as well as along numbers */}
+                {(isLine && f.key === 'x' ? ds.columns : ds.numericCols).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {usesGroup ? (
+            <label className="block">
+              <span className="text-xs text-gray-500">{isHist ? 'Overlay by (optional)' : 'Group by (optional)'}</span>
+              <select
+                value={sel.group}
+                onChange={(e) => setSel((s) => ({ ...s, group: e.target.value }))}
+                className={selectClass}
+              >
+                <option value="">{isHist ? 'None (one histogram)' : 'None (one group)'}</option>
+                {groupable
+                  .filter((c) => c !== sel.y)
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : isHeat || isSurface ? null : (
+            <label className="block">
+              <span className="text-xs text-gray-500">Colour by (optional)</span>
+              <select
+                value={sel.color}
+                onChange={(e) => setSel((s) => ({ ...s, color: e.target.value }))}
+                className={selectClass}
+              >
+                <option value="">None</option>
+                {ds.categoricalCols.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {type === 'scatter' && (
+            <label className="block">
+              <span className="text-xs text-gray-500">Animate over (optional)</span>
+              <select value={animateBy} onChange={(e) => setAnimateBy(e.target.value)} className={selectClass}>
+                <option value="">None</option>
+                {ds.columns.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+
+        {type === 'scatter' && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label
+              className={`flex items-center gap-2 text-sm w-fit ${
+                animateBy ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 cursor-pointer'
+              }`}
+              title={animateBy ? 'The fit line is not drawn while animating' : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={trendline && !animateBy}
+                disabled={!!animateBy}
+                onChange={(e) => setTrendline(e.target.checked)}
+                className="accent-green-500"
+              />
+              Add straight-line fit (with R²)
+            </label>
+            {animateBy && (
+              <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cumulative}
+                  onChange={(e) => setCumulative(e.target.checked)}
+                  className="accent-green-500"
+                />
+                Keep earlier points on screen
+              </label>
+            )}
+          </div>
+        )}
+
+        {isLine && (
+          <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+            <input
+              type="checkbox"
+              checked={markers}
+              onChange={(e) => setMarkers(e.target.checked)}
+              className="accent-green-500"
+            />
+            Show a point at every value
+          </label>
+        )}
+
+        {isSurface && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">Grid cells per axis</span>
+              <input
+                type="number"
+                min={2}
+                max={MAX_SURFACE_GRID}
+                step={1}
+                value={bins}
+                placeholder="Auto"
+                onChange={(e) => setBins(e.target.value)}
+                aria-label="Grid cells per axis"
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPoints}
+                onChange={(e) => setShowPoints(e.target.checked)}
+                className="accent-green-500"
+              />
+              Show the rows as dots
+            </label>
+          </div>
+        )}
+
+        {isHeat && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Heatmap shows</p>
+            <div className="flex gap-2">
+              <button onClick={() => setHeatMode('correlation')} className={segClass(heatMode === 'correlation')}>
+                Correlation
+              </button>
+              <button onClick={() => setHeatMode('density')} className={segClass(heatMode === 'density')}>
+                Density of two columns
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isCorr && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-6">
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span className="text-xs text-gray-500">Correlation</span>
+                <select
+                  value={corrMethod}
+                  onChange={(e) => setCorrMethod(e.target.value as CorrMethod)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+                >
+                  {CORR_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setHeatCols(ds.numericCols.slice(0, MAX_HEATMAP_COLUMNS))}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setHeatCols([])}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-2">
+                Columns to compare ({heatCols.length} chosen, up to {MAX_HEATMAP_COLUMNS})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ds.numericCols.map((c) => {
+                  const on = heatCols.includes(c)
+                  const full = !on && heatCols.length >= MAX_HEATMAP_COLUMNS
+                  return (
+                    <button
+                      key={c}
+                      aria-pressed={on}
+                      disabled={full}
+                      title={full ? `At most ${MAX_HEATMAP_COLUMNS} columns` : undefined}
+                      onClick={() =>
+                        // keep the columns in the order of the data, so the matrix does not reshuffle as you click
+                        setHeatCols(ds.numericCols.filter((n) => (n === c ? !on : heatCols.includes(n))))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        on
+                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                          : 'text-gray-400 border-gray-700 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(isHist || isDensity) && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">Bins</span>
+              <input
+                type="number"
+                min={1}
+                max={MAX_BINS}
+                step={1}
+                value={bins}
+                placeholder="Auto"
+                onChange={(e) => setBins(e.target.value)}
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <span className="text-xs text-gray-500">{isDensity ? 'Colour shows' : 'Bar height'}</span>
+              <select
+                value={histNorm}
+                onChange={(e) => setHistNorm(e.target.value as HistNorm)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+              >
+                {HIST_NORM_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {isGrouped && (
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPoints}
+                onChange={(e) => setShowPoints(e.target.checked)}
+                className="accent-green-500"
+              />
+              Show individual points
+            </label>
+            {isDist && (
+              <label className="flex items-center gap-2 text-sm text-gray-300 w-fit cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMean}
+                  onChange={(e) => setShowMean(e.target.checked)}
+                  className="accent-green-500"
+                />
+                {type === 'box' ? 'Show mean ± SD' : 'Show mean line'}
+              </label>
+            )}
+            {type === 'bar' && (
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <span className="text-xs text-gray-500">Error bars</span>
+                <select
+                  value={errorBars}
+                  onChange={(e) => setErrorBars(e.target.value as ErrorBars)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500/50"
+                >
+                  {ERROR_BAR_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-3 p-4 bg-red-500/5 border border-red-500/20 rounded-lg">
+          <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+
+      {!plotly && !error && <p className="text-xs text-gray-500">Loading charting library…</p>}
+
+      {/* Plotly draws into the inner element, whose class and size never change: React rewriting its class would erase the
+          classes Plotly adds, and display:none would make Plotly measure a width of zero when it redraws after an error. */}
+      <div className={`w-full rounded-lg overflow-hidden border-gray-800 ${error ? 'h-0 border-0' : 'border'}`}>
+        <div ref={chartRef} className="w-full" style={{ height: type === 'scatter' && animateBy ? 640 : 520 }} />
+      </div>
+
+      {info && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">
+              {isCorr || isSurface ? `${info.plotted} rows used` : `${info.plotted} ${type === 'histogram' ? 'values' : 'points'} plotted`}
+              {info.skipped > 0 && ` · ${info.skipped} rows skipped (missing or non-numeric values)`}
+            </p>
+            {info.caption && <p className="text-xs text-gray-400">{info.caption}</p>}
+            {info.notes.map((n) => (
+              <p key={n} className="text-xs text-yellow-400">
+                {n}
+              </p>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => download('png')}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+            >
+              <Download size={14} /> PNG
+            </button>
+            <button
+              onClick={() => download('svg')}
+              disabled={is3d}
+              title={is3d ? '3D charts cannot be exported as SVG; use PNG' : 'Vector image for papers and slides'}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download size={14} /> SVG
+            </button>
+          </div>
+        </div>
+      )}
+
+      {info?.summary && info.summary.length > 0 && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 text-left">
+                {['Group', 'n', 'Mean', 'SD', 'SEM', '95% CI'].map((h) => (
+                  <th key={h} className="py-1 pr-4 font-normal">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {info.summary.map((r) => (
+                <tr key={r.group} className="border-t border-gray-800">
+                  <td className="py-1 pr-4 text-white">{r.group}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{r.n}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.mean)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.sd)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">{formatStat(r.sem)}</td>
+                  <td className="py-1 pr-4 text-white font-mono">
+                    {r.ciLow === null || r.ciHigh === null ? '—' : `${formatStat(r.ciLow)} to ${formatStat(r.ciHigh)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type Mode = 'data' | 'function' | 'equations'
+
+export default function ChartStudio({ data }: Props) {
+  const [mode, setMode] = useState<Mode>('data')
+  // The style choice is kept when switching between the two screens.
+  const [preset, setPreset] = useState<StylePreset>('dark')
+  // Functions sent over from the Equations screen to start the plotter with.
+  const [plotSeed, setPlotSeed] = useState<string[] | undefined>(undefined)
+
+  return (
+    <div className="space-y-5 max-w-5xl">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Chart Studio</h2>
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => setMode('data')} className={segClass(mode === 'data')}>
+            From my data
+          </button>
+          <button
+            onClick={() => {
+              setPlotSeed(undefined)
+              setMode('function')
+            }}
+            title="Type a formula such as sin(x) or x^2 + y^2. No data needed."
+            className={segClass(mode === 'function')}
+          >
+            Function plotter
+          </button>
+          <button
+            onClick={() => setMode('equations')}
+            title="Differentiate, integrate, solve and simplify, with the working shown as typeset maths."
+            className={segClass(mode === 'equations')}
+          >
+            Equations
+          </button>
+        </div>
+      </div>
+      {mode === 'data' ? (
+        <DataCharts data={data} preset={preset} setPreset={setPreset} />
+      ) : mode === 'function' ? (
+        <FunctionPlotter preset={preset} setPreset={setPreset} seed={plotSeed} />
+      ) : (
+        <Equations
+          onPlot={(texts) => {
+            setPlotSeed(texts)
+            setMode('function')
+          }}
+        />
+      )}
+    </div>
+  )
+}

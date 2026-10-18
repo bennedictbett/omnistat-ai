@@ -3,6 +3,8 @@
 Limits are read from env on every call (so they are easy to tune and to test):
   R_RATE_LIMIT_PER_MIN   per client (default 10)
   R_GLOBAL_RATE_PER_MIN  across all clients (default 60)
+  MATH_RATE_LIMIT_PER_MIN / MATH_GLOBAL_RATE_PER_MIN  the same for the equations endpoint (30 / 200)
+  VOICE_RATE_LIMIT_PER_MIN / VOICE_GLOBAL_RATE_PER_MIN  the same for voice transcription (10 / 60)
 
 In-memory means each server process counts separately. That is fine for one
 instance; if you scale to several, move the counters to Redis.
@@ -45,17 +47,17 @@ def client_id(request: Request) -> str:
     return request.headers.get("x-client-ip") or (request.client.host if request.client else "unknown")
 
 
-async def rate_limit_r(request: Request, key_id: str = Depends(require_api_key)) -> None:
-    per_client = int(os.getenv("R_RATE_LIMIT_PER_MIN", "10"))
-    global_limit = int(os.getenv("R_GLOBAL_RATE_PER_MIN", "60"))
+def _enforce(request: Request, tag: str, per_client: int, global_limit: int) -> None:
+    """Sliding-window check. `tag` keeps one endpoint's counters apart from another's."""
     now = time.monotonic()
+    ckey = f"{tag}c:{client_id(request)}"
     with _lock:
-        wait = _retry_after(f"c:{client_id(request)}", per_client, now)
+        wait = _retry_after(ckey, per_client, now)
         if wait is None:
-            wait = _retry_after("global", global_limit, now)
+            wait = _retry_after(f"{tag}global", global_limit, now)
             if wait is not None:
                 # the client slot was consumed above; give it back so a global block isn't charged to them
-                _hits[f"c:{client_id(request)}"].pop()
+                _hits[ckey].pop()
         # drop empty buckets so memory doesn't grow with unique IPs
         for k in [k for k, q in _hits.items() if not q]:
             del _hits[k]
@@ -65,3 +67,29 @@ async def rate_limit_r(request: Request, key_id: str = Depends(require_api_key))
             detail="Too many requests, please slow down",
             headers={"Retry-After": str(int(wait))},
         )
+
+
+async def rate_limit_r(request: Request, key_id: str = Depends(require_api_key)) -> None:
+    _enforce(
+        request, "",
+        int(os.getenv("R_RATE_LIMIT_PER_MIN", "10")),
+        int(os.getenv("R_GLOBAL_RATE_PER_MIN", "60")),
+    )
+
+
+async def rate_limit_math(request: Request, key_id: str = Depends(require_api_key)) -> None:
+    """Separate counters from R, so using one does not use up the other's allowance."""
+    _enforce(
+        request, "math:",
+        int(os.getenv("MATH_RATE_LIMIT_PER_MIN", "30")),
+        int(os.getenv("MATH_GLOBAL_RATE_PER_MIN", "200")),
+    )
+
+
+async def rate_limit_voice(request: Request, key_id: str = Depends(require_api_key)) -> None:
+    """Each transcription costs money on Groq, so this is the tightest of the three."""
+    _enforce(
+        request, "voice:",
+        int(os.getenv("VOICE_RATE_LIMIT_PER_MIN", "10")),
+        int(os.getenv("VOICE_GLOBAL_RATE_PER_MIN", "60")),
+    )

@@ -1,6 +1,6 @@
 'use client'
 
-import { Brain, Upload, BarChart2, Activity, Database, FileText } from 'lucide-react'
+import { Brain, Upload, BarChart2, Activity, Database, FileText, ChartScatter } from 'lucide-react'
 
 const tabs = [
   { id: 'jarvis', label: 'Jarvis AI', icon: Brain },
@@ -10,6 +10,7 @@ const tabs = [
   { id: 'survival', label: 'Survival Curve', icon: Activity },
   { id: 'history', label: 'History', icon: FileText },
   { id: 'descriptive', label: 'Descriptive Stats', icon: BarChart2 },
+  { id: 'charts', label: 'Chart Studio', icon: ChartScatter },
 ]
 
 interface SidebarProps {
@@ -55,5 +56,3 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     </div>
   )
 }
-
-
