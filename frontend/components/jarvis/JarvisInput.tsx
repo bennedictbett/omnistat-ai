@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react'
 import { Brain, Send, Loader2, Play, Mic, Square } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import RAnalysisPanel from '@/components/jarvis/RAnalysisPanel'
+import { RTestCatalog, fetchRTests, normalizeTestName } from '@/lib/rApi'
 import { formatClock, joinText, MAX_SECONDS } from '@/lib/voiceInput'
 import { useVoiceInput } from './useVoiceInput'
 
@@ -73,26 +75,29 @@ function getEndpointForTest(test: string): { url: string; body: any } | null {
 }
 
 export default function JarvisInput() {
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [running, setRunning] = useState(false)
-  const [response, setResponse] = useState<JarvisResponse | null>(null)
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+    const [query, setQuery] = useState('')
+    const [loading, setLoading] = useState(false)
+    const [running, setRunning] = useState(false)
+    const [response, setResponse] = useState<JarvisResponse | null>(null)
+    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+    const [rCatalog, setRCatalog] = useState<RTestCatalog | null>(null)
+    const [rTest, setRTest] = useState<string | null>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
 
-  // Dictation fills the box; the person reads it and presses Send themselves.
-  const voice = useVoiceInput((text) => {
-    setQuery((q) => joinText(q, text))
-    inputRef.current?.focus()
-  })
-  const recording = voice.state === 'recording'
-  const transcribing = voice.state === 'transcribing'
+    // Dictation fills the box; the person reads it and presses Send themselves.
+    const voice = useVoiceInput((text) => {
+      setQuery((q) => joinText(q, text))
+      inputRef.current?.focus()
+    })
+    const recording = voice.state === 'recording'
+    const transcribing = voice.state === 'transcribing'
 
   const handleSubmit = async () => {
     if (!query.trim()) return
     setLoading(true)
     setResponse(null)
     setAnalysisResult(null)
+    setRTest(null)
 
     try {
       const res = await fetch('https://omnistat-ai.onrender.com/api/agent/query', {
@@ -113,6 +118,24 @@ export default function JarvisInput() {
     if (!response?.intent) return
     setRunning(true)
     setAnalysisResult(null)
+    setRTest(null)
+
+    // Tests that have an R template run on the user's uploaded data via the column picker.
+    let catalog = rCatalog
+    if (!catalog) {
+      try {
+        catalog = await fetchRTests()
+        setRCatalog(catalog)
+      } catch {
+        catalog = null // backend unreachable: fall back to the original behaviour below
+      }
+    }
+    const rName = normalizeTestName(response.intent.test)
+    if (catalog && catalog[rName]) {
+      setRTest(rName)
+      setRunning(false)
+      return
+    }
 
     const endpoint = getEndpointForTest(response.intent.test)
 
@@ -307,6 +330,15 @@ export default function JarvisInput() {
             <p className="text-sm text-red-400">{response.error}</p>
           )}
         </div>
+      )}
+
+      {/* R analysis on uploaded data */}
+      {rTest && rCatalog && rCatalog[rTest] && response?.intent && (
+        <RAnalysisPanel
+          test={rTest}
+          spec={rCatalog[rTest]}
+          intentVariables={response.intent.variables}
+        />
       )}
 
             {/* Analysis Result */}
