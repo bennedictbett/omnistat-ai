@@ -1,0 +1,1442 @@
+[
+  {
+    "query": "which specific groups differ after one way anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "run tukey test after anova to find pairwise differences",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "bonferroni correction after multiple comparisons anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "post hoc pairwise comparisons between treatment groups",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "tukey hsd to identify which group means differ",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "scheffe test for all pairwise group comparisons",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "after anova which pairs are significantly different",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "pairwise comparison of group means post anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "multiple comparison correction after anova results",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "adjust p values for multiple testing after anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "which dosage groups differ from each other",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare all group pairs after significant anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "newman keuls test after anova",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "duncan multiple range test for group differences",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "dunnett test comparing all groups to control",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "post hoc analysis to locate source of anova significance",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "family wise error rate correction for multiple tests",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "protected lsd after significant anova result",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "identify which treatment arms differ significantly",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "games howell post hoc for unequal variances",
+    "intent": {
+      "test": "post_hoc",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is average systolic bp significantly different from 130",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test if mean haemoglobin is below normal of 13",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare sample mean glucose to population reference of 5.6",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is our cohort mean bmi different from national average of 25",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "one sample test against known standard value",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test whether mean creatinine differs from threshold of 1",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is the average age in my sample different from 40",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare mean egfr to clinical cutoff of 60",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is mean wbc count different from normal of 7",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test if average pain score differs from population norm of 3",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare department mean to hospital wide average",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "does the sample mean differ from the hypothesized value",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test the mean against a known reference standard",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare cohort average to published population mean",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is average troponin level above the normal cutoff",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test if mean alt differs from upper limit of normal",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare mean inr to target therapeutic value of 2.5",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is average heart rate in my sample normal",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "test mean oxygen saturation against expected 98 percent",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare sample mean psa to age adjusted reference",
+    "intent": {
+      "test": "one_sample",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "structural equation model to test clinical pathway",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "confirmatory factor analysis for quality of life scale",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "mixed effects model for repeated patient measurements",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "propensity score matching to control for confounders",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "multilevel regression for patients within hospitals",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "bayesian analysis with prior information from literature",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "latent variable model for unobserved clinical constructs",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "random effects model for clustered study design",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "mcmc estimation for complex hierarchical model",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "meta analysis combining results from multiple studies",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "forest plot for pooled effect size across trials",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "instrumental variable analysis for causal inference",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "mediation analysis to decompose total effect",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "moderation analysis to test interaction effects",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "growth curve model for individual trajectories over time",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "hierarchical model with patients nested within clinics",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "network meta analysis comparing multiple treatments",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "bayesian hierarchical model for multi site trial",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "path analysis to test hypothesised causal model",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "exploratory factor analysis of symptom questionnaire",
+    "intent": {
+      "test": "advanced_modeling",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "forecast monthly hospital admissions for next quarter",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "arima model for weekly emergency department visits",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "seasonal pattern in monthly infection rates",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "detect sudden change in patient monitoring data",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is this time series stationary or does it trend",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "autocorrelation in daily blood pressure readings",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "decompose weekly icu occupancy into trend and season",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "granger causality between antibiotic use and resistance",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "predict next six months of disease incidence",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "augmented dickey fuller test for unit root",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "moving average of daily new cases",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "exponential smoothing forecast for lab workload",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "breakpoint detection in longitudinal patient data",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "time series of monthly mortality rates",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "ljung box test for autocorrelation in residuals",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "var model for multiple interrelated health indicators",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "nowcasting current disease burden from delayed data",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "interrupted time series after policy change",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "spectral analysis of circadian rhythm in vitals",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "cross correlation between two health time series",
+    "intent": {
+      "test": "time_series",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "relative risk of stroke in hypertensive patients",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "odds ratio for diabetes in obese versus normal weight",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how many patients need treatment to prevent one event",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "incidence rate of new tuberculosis cases per 100000",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "prevalence of anaemia in pregnant women",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "population attributable risk for smoking and cancer",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "standardised mortality ratio for our hospital",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "secondary attack rate in household contacts",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "case fatality rate during cholera outbreak",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "attributable fraction for alcohol and liver disease",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "risk difference between treated and untreated groups",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "absolute risk reduction after statin therapy",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "number needed to harm for drug side effect",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "age standardised incidence rate for comparison",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "period prevalence of depression in study year",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "cumulative incidence of infection over follow up",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "infection attack rate by age group",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "proportional mortality ratio for occupational exposure",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "years of life lost due to premature mortality",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "disability adjusted life years for disease burden",
+    "intent": {
+      "test": "epi_measures",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "xgboost model to predict hospital readmission",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "random forest feature importance for mortality prediction",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "cross validation accuracy of sepsis classifier",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "shap waterfall plot to explain single patient prediction",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "roc auc for gradient boosting diabetes model",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "hyperparameter tuning for classification model",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "confusion matrix for disease classifier",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "precision recall curve for imbalanced outcome",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "lightgbm for length of stay prediction",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "svm to classify tumour type from features",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "neural network for ecg arrhythmia detection",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "permutation feature importance for readmission model",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "calibration curve for risk prediction model",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "ensemble model combining multiple classifiers",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "train test split evaluation for clinical predictor",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "decision tree for triage classification",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "logistic regression as baseline machine learning model",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "k nearest neighbours for patient similarity matching",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "naive bayes symptom based diagnosis classifier",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "learning curve to diagnose overfitting in classifier",
+    "intent": {
+      "test": "ml_supervised",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how long until patients experience disease relapse",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "time to first readmission after discharge",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "when do patients typically die after cancer diagnosis",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "estimate median survival time in the cohort",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "time to treatment failure in clinical trial",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how many days until wound healing is complete",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "duration until next seizure in epilepsy patients",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "time from diagnosis to surgery",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "event free survival in paediatric cancer patients",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "compare time to recovery between two wards",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "months until hiv viral suppression after art",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "log rank test comparing survival by disease stage",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "hazard ratio for treatment effect on mortality",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "censored observations in time to event data",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "restricted mean survival time comparison",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "landmark analysis at 6 month time point",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "cumulative incidence of relapse accounting for death",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "time to cardiovascular event in diabetes cohort",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "cause specific hazard for competing events",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "progression free survival in oncology trial",
+    "intent": {
+      "test": "survival",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "do the two devices give the same blood pressure reading",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how well does this screening test detect the disease",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "agreement between two radiologists reading the same scan",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "is the point of care test interchangeable with lab test",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "sensitivity and specificity of rapid diagnostic test",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "best threshold for troponin to rule out heart attack",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "limits of agreement between manual and automated count",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "intraclass correlation for repeated measurements",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "kappa statistic for two doctors rating same x ray",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how consistent is the new assay with the reference method",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "area under roc curve for sepsis biomarker",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "positive predictive value of screening mammogram",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "negative predictive value for ruling out disease",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "youden index to find optimal diagnostic cutoff",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "bland altman plot for two cholesterol measurement methods",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "can we replace the old test with the new one",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "how reproducible are the measurements between labs",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "concordance between self reported and clinical diagnosis",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "likelihood ratio for positive test result",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  },
+  {
+    "query": "pretest and post test probability after diagnostic result",
+    "intent": {
+      "test": "diagnostic_agreement",
+      "variables": [],
+      "assumptions": [],
+      "visualization": ""
+    }
+  }
+]
