@@ -7,3 +7,10 @@ services:
     envVars:
       - key: GROQ_API_KEY
         sync: false
+envVars:
+  - key: GROQ_API_KEY
+    sync: false
+  - key: HF_TOKEN
+    sync: false
+  - key: HF_MODEL_REPO
+    value: BenedictBett/omnistat-intent-classifier

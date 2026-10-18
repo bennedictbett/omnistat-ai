@@ -17,8 +17,22 @@ from transformers import AutoTokenizer
 
 # ── Config ─────────────────────────────────────────────────────
 MODEL_DIR   = Path(__file__).parent.parent.parent / "models" / "intent_model"
+HF_REPO_ID  = os.getenv("HF_MODEL_REPO", "BenedictBett/omnistat-intent-classifier")
 MAX_LENGTH  = 128
 TOP_K       = 3
+
+
+def _ensure_model_downloaded() -> Path:
+    """Download the model from HF Hub if not already present locally."""
+    if (MODEL_DIR / "model.onnx").exists():
+        return MODEL_DIR
+    from huggingface_hub import snapshot_download
+    downloaded = snapshot_download(
+        repo_id=HF_REPO_ID,
+        token=os.getenv("HF_TOKEN"),
+        local_dir=str(MODEL_DIR),
+    )
+    return Path(downloaded)
 
 # Alias matcher — catches explicit test names and common misspellings
 # before the model runs, guaranteeing high confidence on known terms
@@ -154,10 +168,11 @@ class IntentClassifier:
     _instance: Optional["IntentClassifier"] = None
 
     def __init__(self, model_dir: Path = MODEL_DIR) -> None:
+        model_dir = _ensure_model_downloaded()
         if not model_dir.exists():
             raise FileNotFoundError(
                 f"Model directory not found: {model_dir}\n"
-                "Unzip omnistat_classifier.zip into models/intent_model/"
+                "Set HF_MODEL_REPO and HF_TOKEN, or unzip the model into models/intent_model/"
             )
 
         model_path = model_dir / "model.onnx"
