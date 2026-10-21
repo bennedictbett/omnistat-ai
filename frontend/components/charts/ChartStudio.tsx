@@ -22,6 +22,7 @@ import {
   toDataset,
 } from '@/lib/chartStudio'
 import FunctionPlotter from './FunctionPlotter'
+import CurveFit from './CurveFit'
 import Equations from './Equations'
 import { PRESETS, segClass, selectClass } from './chartStyles'
 
@@ -644,7 +645,7 @@ function DataCharts({ data, preset, setPreset }: DataProps) {
   )
 }
 
-type Mode = 'data' | 'function' | 'equations'
+type Mode = 'data' | 'function' | 'equations' | 'curveFit' 
 
 export default function ChartStudio({ data }: Props) {
   const [mode, setMode] = useState<Mode>('data')
@@ -679,11 +680,20 @@ export default function ChartStudio({ data }: Props) {
             Equations
           </button>
         </div>
+          <button
+            onClick={() => setMode('curveFit')}
+            title="Fit a dose-response (EC50) or Michaelis-Menten curve to your data."
+            className={segClass(mode === 'curveFit')}
+          >
+            Curve fit
+          </button>
       </div>
       {mode === 'data' ? (
         <DataCharts data={data} preset={preset} setPreset={setPreset} />
       ) : mode === 'function' ? (
         <FunctionPlotter preset={preset} setPreset={setPreset} seed={plotSeed} />
+      ) : mode === 'curveFit' ? (
+        <CurveFit />
       ) : (
         <Equations
           onPlot={(texts) => {

@@ -41,6 +41,32 @@ grp <- setNames(lapply(lv, function(l) y[g == l]), lv)
 if (any(sapply(grp, length) < 2)) stop("Each group needs at least 2 observations")
 """
 
+_FIT_PREP = r"""
+x <- df[[params$x]]; y <- df[[params$y]]
+ok <- complete.cases(x, y); x <- x[ok]; y <- y[ok]
+if (!is.numeric(x) || !is.numeric(y)) stop("x and y must both be numeric")
+if (length(x) < 6) stop("Need at least 6 complete points to fit a curve")
+"""
+
+# fit_report(): parameter table with Wald 95% CIs, plus a delta-method 95% band
+# for the fitted curve. `f(grid, p)` must be the same model the nls call fits.
+_FIT_HELPERS = r"""
+fit_report <- function(fit, f, grid) {
+  p <- coef(fit); V <- vcov(fit)
+  tq <- qt(0.975, df.residual(fit)); se <- sqrt(diag(V))
+  pars <- data.frame(parameter = names(p), estimate = unname(p), se = unname(se),
+                     lwr = unname(p - tq * se), upr = unname(p + tq * se), row.names = NULL)
+  fy <- f(grid, p)
+  J <- sapply(seq_along(p), function(i) {
+    h <- max(abs(p[i]), 1e-8) * 1e-6
+    q <- p; q[i] <- q[i] + h
+    (f(grid, q) - fy) / h
+  })
+  se_fit <- sqrt(rowSums((J %*% V) * J))
+  list(pars = pars, fit = fy, lwr = fy - tq * se_fit, upr = fy + tq * se_fit)
+}
+r_squared <- function(y, fit) 1 - sum(residuals(fit)^2) / sum((y - mean(y))^2)
+"""
 TEMPLATES: dict[str, Template] = {
     "independent_t_test": Template(
         "Independent samples t-test (Welch)",
@@ -163,6 +189,66 @@ emit("p_value", sw$p.value)
 emit("normal_at_0.05", sw$p.value > 0.05)
 emit("n", length(v))
 qqnorm(v, main = paste("Normal Q-Q:", params$variable)); qqline(v)
+""",
+    ),
+        "dose_response_4pl": Template(
+        "Dose-response: 4-parameter logistic (EC50 / IC50)",
+        {"x": "concentration column (numeric, > 0)", "y": "response column (numeric)"},
+        _FIT_PREP + _FIT_HELPERS + r"""
+pos <- x > 0
+if (sum(pos) < 6) stop("Need at least 6 points with concentration > 0 (a log scale cannot include 0)")
+emit("excluded_zero_concentration_points", sum(!pos))
+x <- x[pos]; y <- y[pos]
+if (length(unique(x)) < 5) stop("Need at least 5 distinct concentrations")
+d <- data.frame(lx = log10(x), y = y)
+fit <- tryCatch(
+  nls(y ~ SSfpl(lx, left_asymptote, right_asymptote, log10_ec50, scale), data = d),
+  error = function(e) stop(paste("Curve fit failed to converge (does the data span the full sigmoid?):", conditionMessage(e)))
+)
+f <- function(lx, p) p[1] + (p[2] - p[1]) / (1 + exp((p[3] - lx) / p[4]))
+gx <- seq(min(d$lx), max(d$lx), length.out = 100)
+r <- fit_report(fit, f, gx)
+p <- coef(fit); pr <- r$pars
+hill_ci <- if (pr$lwr[4] > 0 || pr$upr[4] < 0) sort(1 / (log(10) * c(pr$lwr[4], pr$upr[4]))) else c(NA, NA)
+emit("test", "4-parameter logistic fit (nls)")
+emit("ec50", unname(10^p[3]))
+emit("ec50_ci_95", 10^c(pr$lwr[3], pr$upr[3]))
+emit("hill_slope", unname(1 / (log(10) * p[4])))
+emit("hill_slope_ci_95", hill_ci)
+emit("r_squared", r_squared(y, fit))
+emit("n", length(y))
+emit("df_residual", df.residual(fit))
+emit("parameters", r$pars)
+emit("curve", data.frame(x = 10^gx, fit = r$fit, lwr = r$lwr, upr = r$upr))
+emit("points", data.frame(x = x, y = y))
+emit("residuals", data.frame(x = x, fitted = unname(fitted(fit)), residual = unname(residuals(fit))))
+plot(x, y, log = "x", pch = 19, xlab = params$x, ylab = params$y, main = "4-parameter logistic fit")
+lines(10^gx, r$fit, lwd = 2); lines(10^gx, r$lwr, lty = 2); lines(10^gx, r$upr, lty = 2)
+""",
+    ),
+    "michaelis_menten": Template(
+        "Michaelis-Menten / one-site binding (hyperbola)",
+        {"x": "substrate or ligand concentration column (numeric, >= 0)", "y": "rate or binding response column (numeric)"},
+        _FIT_PREP + _FIT_HELPERS + r"""
+if (any(x < 0)) stop("Concentrations must be zero or positive")
+d <- data.frame(x = x, y = y)
+fit <- tryCatch(
+  nls(y ~ SSmicmen(x, Vmax, Km), data = d),
+  error = function(e) stop(paste("Curve fit failed to converge (does the data approach a plateau?):", conditionMessage(e)))
+)
+f <- function(x, p) p[1] * x / (p[2] + x)
+gx <- seq(0, max(x), length.out = 100)
+r <- fit_report(fit, f, gx)
+emit("test", "Michaelis-Menten fit (nls); for one-site binding read Vmax as Bmax and Km as Kd")
+emit("r_squared", r_squared(y, fit))
+emit("n", length(y))
+emit("df_residual", df.residual(fit))
+emit("parameters", r$pars)
+emit("curve", data.frame(x = gx, fit = r$fit, lwr = r$lwr, upr = r$upr))
+emit("points", data.frame(x = x, y = y))
+emit("residuals", data.frame(x = x, fitted = unname(fitted(fit)), residual = unname(residuals(fit))))
+plot(x, y, pch = 19, xlab = params$x, ylab = params$y, main = "Michaelis-Menten fit")
+lines(gx, r$fit, lwd = 2); lines(gx, r$lwr, lty = 2); lines(gx, r$upr, lty = 2)
 """,
     ),
 }

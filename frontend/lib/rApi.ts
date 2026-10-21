@@ -49,6 +49,11 @@ const ALIASES: Record<string, string> = {
   chi_square_test: 'chi_square',
   shapiro: 'shapiro_wilk',
   shapiro_wilk_test: 'shapiro_wilk',
+  dose_response: 'dose_response_4pl',
+  four_parameter_logistic: 'dose_response_4pl',
+  '4pl': 'dose_response_4pl',
+  one_site_binding: 'michaelis_menten',
+  enzyme_kinetics: 'michaelis_menten',
 }
 
 export function normalizeTestName(test: string): string {
@@ -142,6 +147,101 @@ export function trimRows(
   })
 }
 
+// ---------- Curve fits ----------
+
+export const CURVE_FIT_TESTS = ['dose_response_4pl', 'michaelis_menten'] as const
+export type CurveFitTest = (typeof CURVE_FIT_TESTS)[number]
+
+export interface FitParameter {
+  parameter: string
+  estimate: number
+  se: number
+  lwr: number
+  upr: number
+}
+export interface FitCurvePoint {
+  x: number
+  fit: number
+  lwr: number
+  upr: number
+}
+export interface FitDataPoint {
+  x: number
+  y: number
+}
+export interface FitResidual {
+  x: number
+  fitted: number
+  residual: number
+}
+
+export interface CurveFit {
+  model: CurveFitTest
+  /** true when x should be drawn on a log axis (dose-response) */
+  logX: boolean
+  parameters: FitParameter[]
+  curve: FitCurvePoint[]
+  points: FitDataPoint[]
+  residuals: FitResidual[]
+  rSquared: number | null
+  n: number | null
+  dfResidual: number | null
+  ec50: number | null
+  ec50Ci: [number, number] | null
+  hillSlope: number | null
+  hillSlopeCi: [number, number] | null
+  excludedZero: number
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+function pair(v: unknown): [number, number] | null {
+  if (!Array.isArray(v) || v.length !== 2) return null
+  const a = num(v[0])
+  const b = num(v[1])
+  return a !== null && b !== null ? [a, b] : null
+}
+/** Returns the rows only if every row is an object whose listed keys are all finite numbers. */
+function numericRows<T>(v: unknown, keys: string[]): T[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null
+  for (const r of v) {
+    if (!isRecord(r)) return null
+    for (const k of keys) if (num(r[k]) === null) return null
+  }
+  return v as T[]
+}
+
+/** Parses a curve-fit run into typed data, or null so callers fall back to the generic view. */
+export function asCurveFit(result: RRunResult): CurveFit | null {
+  if (!result.ok || !(CURVE_FIT_TESTS as readonly string[]).includes(result.test)) return null
+  const r = result.results
+  const parameters = numericRows<FitParameter>(r.parameters, ['estimate', 'se', 'lwr', 'upr'])
+  const curve = numericRows<FitCurvePoint>(r.curve, ['x', 'fit', 'lwr', 'upr'])
+  const points = numericRows<FitDataPoint>(r.points, ['x', 'y'])
+  const residuals = numericRows<FitResidual>(r.residuals, ['x', 'fitted', 'residual'])
+  if (!parameters || !curve || !points || !residuals) return null
+  return {
+    model: result.test as CurveFitTest,
+    logX: result.test === 'dose_response_4pl',
+    parameters,
+    curve,
+    points,
+    residuals,
+    rSquared: num(r.r_squared),
+    n: num(r.n),
+    dfResidual: num(r.df_residual),
+    ec50: num(r.ec50),
+    ec50Ci: pair(r.ec50_ci_95),
+    hillSlope: num(r.hill_slope),
+    hillSlopeCi: pair(r.hill_slope_ci_95),
+    excludedZero: num(r.excluded_zero_concentration_points) ?? 0,
+  }
+}
+
 // ---------- Running a test ----------
 
 function detailText(body: unknown): string | null {
@@ -229,6 +329,12 @@ const KEY_LABELS: Record<string, string> = {
   assumption_fligner_p: 'Equal variances (Fligner p)',
   pct_expected_counts_below_5: '% of expected counts below 5',
   'normal_at_0.05': 'Normal at α = 0.05',
+  ec50: 'EC50',
+  ec50_ci_95: 'EC50 (95% CI)',
+  hill_slope: 'Hill slope',
+  hill_slope_ci_95: 'Hill slope (95% CI)',
+  df_residual: 'Residual degrees of freedom',
+  excluded_zero_concentration_points: 'Zero-concentration points excluded',
 }
 
 export function prettyKey(key: string): string {

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Play, AlertCircle, Upload } from 'lucide-react'
+import RegressionPlot from '@/components/analytics/RegressionPlot'
 import {
+  asCurveFit,
   RApiError,
   RRunResult,
   RTestSpec,
@@ -169,6 +171,18 @@ function ResultView({ result }: { result: RRunResult }) {
 
   const { results } = result
   const testName = typeof results.test === 'string' ? results.test : result.title
+  const fit = asCurveFit(result)
+  if (fit) {
+    return (
+      <div className="space-y-5 border-t border-gray-800 pt-5">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium text-white">{testName}</p>
+          <p className="text-xs text-gray-500">{result.duration_s.toFixed(1)}s</p>
+        </div>
+        <RegressionPlot fit={fit} xLabel={result.variables.x ?? 'x'} yLabel={result.variables.y ?? 'y'} />
+      </div>
+    )
+  }
   const p = typeof results.p_value === 'number' ? results.p_value : null
   const rest = Object.entries(results).filter(([k]) => k !== 'test' && k !== 'p_value')
   const scalars = rest.filter(([, v]) => !Array.isArray(v) && !isPlainObject(v))
