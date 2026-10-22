@@ -67,6 +67,18 @@ fit_report <- function(fit, f, grid) {
 }
 r_squared <- function(y, fit) 1 - sum(residuals(fit)^2) / sum((y - mean(y))^2)
 """
+_PAIRED_PREP = r"""
+a <- df[[params$first]]; b <- df[[params$second]]
+ok <- complete.cases(a, b); a <- a[ok]; b <- b[ok]
+if (!is.numeric(a) || !is.numeric(b)) stop("Both columns must be numeric")
+if (length(a) < 3) stop("Need at least 3 complete pairs")
+d <- a - b  # first minus second
+"""
+
+_PAIRED_ROLES = {
+    "first": "numeric column: first measurement (e.g. before)",
+    "second": "numeric column: second measurement (e.g. after)",
+}
 TEMPLATES: dict[str, Template] = {
     "independent_t_test": Template(
         "Independent samples t-test (Welch)",
@@ -249,6 +261,79 @@ emit("points", data.frame(x = x, y = y))
 emit("residuals", data.frame(x = x, fitted = unname(fitted(fit)), residual = unname(residuals(fit))))
 plot(x, y, pch = 19, xlab = params$x, ylab = params$y, main = "Michaelis-Menten fit")
 lines(gx, r$fit, lwd = 2); lines(gx, r$lwr, lty = 2); lines(gx, r$upr, lty = 2)
+""",
+    ),
+    "paired_t_test": Template(
+        "Paired t-test",
+        _PAIRED_ROLES,
+        _PAIRED_PREP + r"""
+if (sd(d) == 0) stop("All pairwise differences are identical, so the test cannot be computed")
+tt <- t.test(a, b, paired = TRUE)
+emit("test", "Paired t-test")
+emit("statistic_t", unname(tt$statistic))
+emit("df", unname(tt$parameter))
+emit("p_value", tt$p.value)
+emit("mean_difference", mean(d))
+emit("ci_95", as.numeric(tt$conf.int))
+emit("cohens_dz", mean(d) / sd(d))
+emit("n_pairs", length(d))
+emit("assumption_shapiro_p_differences", if (length(d) <= 5000) shapiro.test(d)$p.value else NA)
+emit("summary", data.frame(variable = c(params$first, params$second), n = length(a),
+     mean = c(mean(a), mean(b)), sd = c(sd(a), sd(b))))
+boxplot(list(a, b), names = c(params$first, params$second), ylab = "Value", main = "Paired measurements")
+segments(1, a, 2, b, col = "grey70")
+""",
+    ),
+    "wilcoxon_signed_rank": Template(
+        "Wilcoxon signed-rank test (paired)",
+        _PAIRED_ROLES,
+        _PAIRED_PREP + r"""
+nz <- d[d != 0]
+if (length(nz) < 3) stop("Need at least 3 non-zero differences")
+exact_ok <- all(d != 0) && !anyDuplicated(abs(d))
+wt <- suppressWarnings(wilcox.test(a, b, paired = TRUE, conf.int = TRUE, exact = exact_ok))
+rk <- rank(abs(nz))
+wplus <- sum(rk[nz > 0]); wminus <- sum(rk[nz < 0])
+emit("test", "Wilcoxon signed-rank test")
+emit("statistic_V", unname(wt$statistic))
+emit("p_value", wt$p.value)
+emit("median_difference", median(d))
+emit("hodges_lehmann_shift", unname(wt$estimate))
+emit("shift_ci_95", as.numeric(wt$conf.int))
+emit("rank_biserial_r", (wplus - wminus) / (wplus + wminus))
+emit("n_pairs", length(d))
+emit("n_zero_differences", sum(d == 0))
+emit("summary", data.frame(variable = c(params$first, params$second), n = length(a),
+     median = c(median(a), median(b)), q1 = c(quantile(a, 0.25), quantile(b, 0.25)),
+     q3 = c(quantile(a, 0.75), quantile(b, 0.75)), row.names = NULL))
+boxplot(list(a, b), names = c(params$first, params$second), ylab = "Value", main = "Paired measurements")
+segments(1, a, 2, b, col = "grey70")
+""",
+    ),
+    "kruskal_wallis": Template(
+        "Kruskal-Wallis test (3+ groups)",
+        {"outcome": "numeric or ordinal outcome column", "group": "column with 3 or more groups"},
+        r"""
+y <- df[[params$outcome]]; g <- df[[params$group]]
+ok <- complete.cases(y, g); y <- y[ok]; g <- factor(g[ok])
+if (!is.numeric(y)) stop("Outcome variable must be numeric (ordinal data coded as numbers is fine)")
+if (nlevels(g) < 3) stop(paste("Kruskal-Wallis needs 3+ groups, found", nlevels(g), "(use Mann-Whitney for 2)"))
+if (any(table(g) < 2)) stop("Each group needs at least 2 observations")
+kw <- kruskal.test(y ~ g)
+n <- length(y)
+pw <- suppressWarnings(pairwise.wilcox.test(y, g, p.adjust.method = "holm", exact = FALSE))$p.value
+idx <- which(!is.na(pw), arr.ind = TRUE)
+emit("test", "Kruskal-Wallis rank sum test")
+emit("statistic_H", unname(kw$statistic))
+emit("df", unname(kw$parameter))
+emit("p_value", kw$p.value)
+emit("epsilon_squared", unname(kw$statistic) * (n + 1) / (n^2 - 1))
+emit("post_hoc_pairwise", data.frame(comparison = paste(rownames(pw)[idx[, "row"]], "vs", colnames(pw)[idx[, "col"]]),
+     p_adj = pw[idx], row.names = NULL))
+emit("groups", data.frame(group = levels(g), n = as.integer(table(g)),
+     median = as.numeric(tapply(y, g, median)), q1 = as.numeric(tapply(y, g, quantile, 0.25)),
+     q3 = as.numeric(tapply(y, g, quantile, 0.75))))
+boxplot(y ~ g, xlab = params$group, ylab = params$outcome, main = "Outcome by group")
 """,
     ),
 }
