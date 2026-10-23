@@ -12,6 +12,7 @@ const NormalityTest = dynamic(() => import('@/components/analytics/NormalityTest
 const SurvivalCurve = dynamic(() => import('@/components/analytics/SurvivalCurve'), { ssr: false })
 const DescriptiveStats = dynamic(() => import('@/components/analytics/DescriptiveStats'), { ssr: false })
 const ChartStudio = dynamic(() => import('@/components/charts/ChartStudio'), { ssr: false })
+const TestWizard = dynamic(() => import('@/components/analytics/TestWizard'), { ssr: false })
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
@@ -41,6 +42,7 @@ export default function Home() {
           {activeTab === 'survival' && <SurvivalCurve />}
           {activeTab === 'descriptive' && <DescriptiveStats />}
           {activeTab === 'charts' && <ChartStudio data={uploadedData} />}
+          {activeTab === 'wizard' && <TestWizard />}
         </main>
       </div>
     </div>
