@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.services.r_templates import TemplateError, run_named_test
+from app.services.r_templates import TemplateError, run_named_test, supported_tests
 
 needs_r = pytest.mark.skipif(shutil.which("Rscript") is None, reason="Rscript not installed")
 
@@ -82,3 +82,70 @@ def test_curve_fit_rejects_unknown_column():
     df = pd.DataFrame({"conc": [1.0, 2.0], "resp": [1.0, 2.0]})
     with pytest.raises(TemplateError):
         _run("dose_response_4pl", {"x": "nope", "y": "resp"}, df)
+
+
+def _paired_df(seed=3, n=30, shift=2.0):
+    rng = np.random.default_rng(seed)
+    a = rng.normal(50, 5, n)
+    return pd.DataFrame({"before": a, "after": a - shift + rng.normal(0, 1, n)})
+
+
+def _three_groups(seed=5):
+    rng = np.random.default_rng(seed)
+    rows = [(name, v) for name, mu in [("A", 10), ("B", 14), ("C", 18)] for v in rng.normal(mu, 3, 15)]
+    return pd.DataFrame(rows, columns=["group", "score"])
+
+
+def test_new_tests_are_registered():
+    assert {"paired_t_test", "wilcoxon_signed_rank", "kruskal_wallis"} <= set(supported_tests())
+
+
+@needs_r
+def test_paired_t_recovers_mean_difference():
+    out = _run("paired_t_test", {"first": "before", "second": "after"}, _paired_df())
+    assert out["ok"], out["error"]
+    res = out["results"]
+    assert res["mean_difference"] == pytest.approx(2.0, abs=0.5)
+    assert res["p_value"] < 0.001
+    assert res["n_pairs"] == 30
+    lo, hi = res["ci_95"]
+    assert lo < res["mean_difference"] < hi
+
+
+@needs_r
+def test_wilcoxon_detects_shift():
+    out = _run("wilcoxon_signed_rank", {"first": "before", "second": "after"}, _paired_df())
+    assert out["ok"], out["error"]
+    res = out["results"]
+    assert res["p_value"] < 0.001
+    assert res["rank_biserial_r"] > 0.8
+    assert res["hodges_lehmann_shift"] == pytest.approx(2.0, abs=0.5)
+
+
+@needs_r
+def test_wilcoxon_rejects_identical_columns():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "b": [1.0, 2.0, 3.0, 4.0]})
+    out = _run("wilcoxon_signed_rank", {"first": "a", "second": "b"}, df)
+    assert out["ok"] is False
+    assert "non-zero" in str(out["error"])
+
+
+@needs_r
+def test_kruskal_wallis_detects_group_differences():
+    out = _run("kruskal_wallis", {"outcome": "score", "group": "group"}, _three_groups())
+    assert out["ok"], out["error"]
+    res = out["results"]
+    assert res["p_value"] < 0.001
+    assert res["epsilon_squared"] > 0.3
+    assert res["df"] == 2
+    assert len(res["post_hoc_pairwise"]) == 3
+    assert len(res["groups"]) == 3
+
+
+@needs_r
+def test_kruskal_wallis_rejects_two_groups():
+    df = _three_groups()
+    df = df[df["group"] != "C"]
+    out = _run("kruskal_wallis", {"outcome": "score", "group": "group"}, df)
+    assert out["ok"] is False
+    assert "3+ groups" in str(out["error"])
