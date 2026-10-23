@@ -1,16 +1,18 @@
 'use client'
 
-import { Brain, Upload, BarChart2, Activity, Database, FileText, ChartScatter } from 'lucide-react'
+import { Brain, Upload, BarChart2, Activity, Database, FileText, ChartScatter, Compass } from 'lucide-react'
 
 const tabs = [
   { id: 'jarvis', label: 'Jarvis AI', icon: Brain },
   { id: 'upload', label: 'Upload Data', icon: Upload },
   { id: 'summary', label: 'Data Summary', icon: Database },
+  { id: 'wizard', label: 'Test Wizard', icon: Compass },
   { id: 'normality', label: 'Normality Test', icon: BarChart2 },
   { id: 'survival', label: 'Survival Curve', icon: Activity },
   { id: 'history', label: 'History', icon: FileText },
   { id: 'descriptive', label: 'Descriptive Stats', icon: BarChart2 },
   { id: 'charts', label: 'Chart Studio', icon: ChartScatter },
+
 ]
 
 interface SidebarProps {
