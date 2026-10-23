@@ -149,3 +149,115 @@ def test_kruskal_wallis_rejects_two_groups():
     out = _run("kruskal_wallis", {"outcome": "score", "group": "group"}, df)
     assert out["ok"] is False
     assert "3+ groups" in str(out["error"])
+
+
+def _regression_df(n=200, seed=11):
+    rng = np.random.default_rng(seed)
+    dose = rng.normal(0, 1, n)
+    age = rng.normal(0, 1, n)
+    y = 3 + 2 * dose - 1.5 * age + rng.normal(0, 0.5, n)
+    return pd.DataFrame({"response": y, "dose": dose, "age": age, "arm": rng.choice(["a", "b"], n)})
+
+
+def _logistic_df(n=500, seed=21, labels=(0, 1)):
+    rng = np.random.default_rng(seed)
+    x = rng.normal(0, 1, n)
+    z = rng.normal(0, 1, n)
+    prob = 1 / (1 + np.exp(-(-0.5 + 1.0 * x)))
+    y = rng.binomial(1, prob)
+    return pd.DataFrame({"outcome": np.where(y == 1, labels[1], labels[0]), "x": x, "z": z})
+
+
+def _coef(out, term):
+    return next(r for r in out["results"]["coefficients"] if r["term"] == term)
+
+
+def test_regression_templates_have_optional_predictors():
+    cat = supported_tests()
+    for name in ("linear_regression", "logistic_regression"):
+        assert "predictor_1" in cat[name]["variables"]
+        assert "predictor_1" not in cat[name]["optional"]
+        assert "predictor_2" in cat[name]["optional"]
+
+
+def test_regression_requires_outcome_and_rejects_unknown_roles():
+    df = _regression_df()
+    with pytest.raises(TemplateError):
+        _run("linear_regression", {"predictor_1": "dose"}, df)
+    with pytest.raises(TemplateError):
+        _run("linear_regression", {"outcome": "response", "predictor_1": "dose", "predictor_9": "age"}, df)
+
+
+@needs_r
+def test_linear_regression_recovers_coefficients():
+    out = _run("linear_regression", {"outcome": "response", "predictor_1": "dose", "predictor_2": "age"}, _regression_df())
+    assert out["ok"], out["error"]
+    res = out["results"]
+    assert _coef(out, "dose")["estimate"] == pytest.approx(2.0, abs=0.15)
+    assert _coef(out, "age")["estimate"] == pytest.approx(-1.5, abs=0.15)
+    assert _coef(out, "(Intercept)")["estimate"] == pytest.approx(3.0, abs=0.15)
+    assert res["r_squared"] > 0.9
+    assert res["p_value"] < 1e-6
+    assert res["n_used"] == 200
+    assert len(res["vif"]) == 2
+
+
+@needs_r
+def test_linear_regression_handles_categorical_predictor_and_missing_values():
+    df = _regression_df()
+    df.loc[:9, "dose"] = np.nan
+    out = _run("linear_regression", {"outcome": "response", "predictor_1": "dose", "predictor_2": "arm"}, df)
+    assert out["ok"], out["error"]
+    assert out["results"]["n_dropped_missing"] == 10
+    terms = [r["term"] for r in out["results"]["coefficients"]]
+    assert "armb" in terms
+
+
+@needs_r
+def test_linear_regression_rejects_collinear_predictors():
+    df = _regression_df()
+    df["dose_copy"] = df["dose"] * 2
+    out = _run("linear_regression", {"outcome": "response", "predictor_1": "dose", "predictor_2": "dose_copy"}, df)
+    assert out["ok"] is False
+    assert "collinear" in str(out["error"])
+
+
+@needs_r
+def test_logistic_regression_recovers_odds_ratio():
+    out = _run("logistic_regression", {"outcome": "outcome", "predictor_1": "x", "predictor_2": "z"}, _logistic_df())
+    assert out["ok"], out["error"]
+    res = out["results"]
+    assert 1.8 < _coef(out, "x")["odds_ratio"] < 4.0
+    assert _coef(out, "x")["or_lwr"] < _coef(out, "x")["odds_ratio"] < _coef(out, "x")["or_upr"]
+    assert res["auc"] > 0.6
+    assert res["p_value"] < 0.001
+    assert res["event"] == "1"
+    assert res["n_events"] + 0 > 5
+
+
+@needs_r
+def test_logistic_regression_uses_text_labels():
+    df = _logistic_df(labels=("no", "yes"))
+    out = _run("logistic_regression", {"outcome": "outcome", "predictor_1": "x"}, df)
+    assert out["ok"], out["error"]
+    assert out["results"]["event"] == "yes"
+    assert out["results"]["reference"] == "no"
+
+
+@needs_r
+def test_logistic_regression_rejects_three_level_outcome():
+    df = _logistic_df()
+    df.loc[:20, "outcome"] = 2
+    out = _run("logistic_regression", {"outcome": "outcome", "predictor_1": "x"}, df)
+    assert out["ok"] is False
+    assert "exactly 2" in str(out["error"])
+
+
+@needs_r
+def test_logistic_regression_rejects_too_few_events():
+    df = _logistic_df()
+    df["outcome"] = 0
+    df.loc[:2, "outcome"] = 1
+    out = _run("logistic_regression", {"outcome": "outcome", "predictor_1": "x"}, df)
+    assert out["ok"] is False
+    assert "Too few" in str(out["error"])
