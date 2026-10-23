@@ -54,6 +54,13 @@ const ALIASES: Record<string, string> = {
   '4pl': 'dose_response_4pl',
   one_site_binding: 'michaelis_menten',
   enzyme_kinetics: 'michaelis_menten',
+  paired_t: 'paired_t_test',
+  paired_samples_t_test: 'paired_t_test',
+  wilcoxon: 'wilcoxon_signed_rank',
+  wilcoxon_signed_rank_test: 'wilcoxon_signed_rank',
+  wilcoxon_rank_sum: 'mann_whitney_u',
+  kruskal: 'kruskal_wallis',
+  kruskal_wallis_test: 'kruskal_wallis',
 }
 
 export function normalizeTestName(test: string): string {
@@ -335,6 +342,18 @@ const KEY_LABELS: Record<string, string> = {
   hill_slope_ci_95: 'Hill slope (95% CI)',
   df_residual: 'Residual degrees of freedom',
   excluded_zero_concentration_points: 'Zero-concentration points excluded',
+    statistic_V: 'V statistic',
+  statistic_H: 'H statistic',
+  statistic_W: 'W statistic',
+  epsilon_squared: 'Epsilon squared',
+  cohens_dz: "Cohen's dz",
+  n_pairs: 'Number of pairs',
+  n_zero_differences: 'Pairs with zero difference',
+  median_difference: 'Median difference',
+  hodges_lehmann_shift: 'Hodges-Lehmann shift',
+  shift_ci_95: 'Shift (95% CI)',
+  assumption_shapiro_p_differences: 'Normality of differences (Shapiro p)',
+  post_hoc_pairwise: 'Post-hoc: pairwise Wilcoxon (Holm-adjusted)',
 }
 
 export function prettyKey(key: string): string {
