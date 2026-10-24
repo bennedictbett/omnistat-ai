@@ -261,3 +261,32 @@ def test_logistic_regression_rejects_too_few_events():
     out = _run("logistic_regression", {"outcome": "outcome", "predictor_1": "x"}, df)
     assert out["ok"] is False
     assert "Too few" in str(out["error"])
+
+
+@needs_r
+def test_linear_regression_matches_numpy_reference():
+    from scipy.stats import chi2
+
+    df = _regression_df()
+    out = _run("linear_regression", {"outcome": "response", "predictor_1": "dose", "predictor_2": "age"}, df)
+    assert out["ok"], out["error"]
+
+    X = np.column_stack([np.ones(len(df)), df["dose"], df["age"]])
+    y = df["response"].to_numpy()
+    bread = np.linalg.inv(X.T @ X)
+    beta = bread @ X.T @ y
+    e = y - X @ beta
+    h = np.einsum("ij,jk,ik->i", X, bread, X)
+    Xw = X * (e / (1 - h))[:, None]
+    se_hc3 = np.sqrt(np.diag(bread @ (Xw.T @ Xw) @ bread))
+
+    e2 = e**2
+    fitted_e2 = X @ np.linalg.solve(X.T @ X, X.T @ e2)
+    r2 = 1 - np.sum((e2 - fitted_e2) ** 2) / np.sum((e2 - e2.mean()) ** 2)
+    bp_p = chi2.sf(len(y) * r2, X.shape[1] - 1)
+
+    rows = {r["term"]: r for r in out["results"]["coefficients"]}
+    for term, i in [("(Intercept)", 0), ("dose", 1), ("age", 2)]:
+        assert rows[term]["estimate"] == pytest.approx(beta[i], rel=1e-6)
+        assert rows[term]["se_hc3"] == pytest.approx(se_hc3[i], rel=1e-5)
+    assert out["results"]["assumption_breusch_pagan_p"] == pytest.approx(bp_p, rel=1e-4)
