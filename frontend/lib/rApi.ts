@@ -7,6 +7,8 @@ export interface RTestSpec {
   title: string
   /** role -> human description, e.g. { outcome: "numeric outcome column" } */
   variables: Record<string, string>
+  /** roles the user may leave out (e.g. extra regression predictors) */
+  optional?: string[]
 }
 export type RTestCatalog = Record<string, RTestSpec>
 
@@ -61,6 +63,11 @@ const ALIASES: Record<string, string> = {
   wilcoxon_rank_sum: 'mann_whitney_u',
   kruskal: 'kruskal_wallis',
   kruskal_wallis_test: 'kruskal_wallis',
+  ols: 'linear_regression',
+  multiple_regression: 'linear_regression',
+  linear_model: 'linear_regression',
+  logistic: 'logistic_regression',
+  logit: 'logistic_regression',
 }
 
 export function normalizeTestName(test: string): string {
@@ -354,6 +361,38 @@ const KEY_LABELS: Record<string, string> = {
   shift_ci_95: 'Shift (95% CI)',
   assumption_shapiro_p_differences: 'Normality of differences (Shapiro p)',
   post_hoc_pairwise: 'Post-hoc: pairwise Wilcoxon (Holm-adjusted)',
+  term: 'Term',
+  estimate: 'Estimate',
+  se: 'Std. error',
+  t: 't',
+  ci_lwr: '95% CI low',
+  ci_upr: '95% CI high',
+  se_hc3: 'Robust SE (HC3)',
+  p_hc3: 'Robust p (HC3)',
+  odds_ratio: 'Odds ratio',
+  or_lwr: 'OR 95% CI low',
+  or_upr: 'OR 95% CI high',
+  estimate_log_odds: 'Log-odds',
+  vif: 'VIF',
+  statistic_F: 'F statistic',
+  df_model: 'Model degrees of freedom',
+  adj_r_squared: 'Adjusted R²',
+  rmse: 'RMSE',
+  n_used: 'Rows used',
+  n_dropped_missing: 'Rows dropped (missing values)',
+  n_events: 'Events',
+  events_per_parameter: 'Events per parameter (aim for 10+)',
+  mcfadden_r2: 'McFadden R²',
+  aic: 'AIC',
+  auc: 'AUC',
+  'sensitivity_at_0.5': 'Sensitivity (0.5 cutoff)',
+  'specificity_at_0.5': 'Specificity (0.5 cutoff)',
+  event: 'Event level',
+  reference: 'Reference level',
+  assumption_breusch_pagan_p: 'Equal residual variance (Breusch-Pagan p)',
+  assumption_hosmer_lemeshow_p: 'Calibration (Hosmer-Lemeshow p)',
+  n_high_influence: "Highly influential rows (Cook's D > 4/n)",
+  model_warnings: 'Model warnings',
 }
 
 export function prettyKey(key: string): string {
