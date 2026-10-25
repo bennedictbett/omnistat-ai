@@ -51,6 +51,7 @@ export const WIZARD: Record<string, WizardNode> = {
       { label: 'Compare a numeric outcome between groups', hint: 'e.g. blood pressure in treatment vs control', next: 'groups_n' },
       { label: 'Compare two measurements on the same subjects', hint: 'e.g. before and after treatment', next: 'paired_n' },
       { label: 'See whether two numeric variables are related', hint: 'e.g. age and cholesterol', next: 'r_correlation' },
+      { label: 'Explain or predict an outcome from one or more variables', hint: 'regression, e.g. blood pressure from age and weight', next: 'reg_outcome' }
       { label: 'See whether two categories are associated', hint: 'e.g. treatment group and recovered (yes/no)', next: 'r_chi_square' },
       { label: 'Check whether a variable is normally distributed', next: 'r_shapiro' },
       { label: 'Fit a curve', hint: 'dose-response or enzyme kinetics', next: 'curve_kind' },
@@ -197,7 +198,38 @@ export const WIZARD: Record<string, WizardNode> = {
     reason: 'Tests whether a numeric variable looks normally distributed, and draws a Q-Q plot.',
     note: 'With large samples it flags tiny, harmless deviations, so look at the Q-Q plot as well.',
   },
-
+  
+    // ----- regression -----
+  reg_outcome: {
+    kind: 'question',
+    text: 'What kind of outcome are you modelling?',
+    options: [
+      { label: 'A number', hint: 'e.g. blood pressure, weight, a score', next: 'r_linear' },
+      { label: 'Two categories', hint: 'e.g. recovered yes/no, positive/negative', next: 'r_logistic' },
+      { label: 'Counts, time-to-event, or 3+ categories', next: 'r_reg_other' },
+    ],
+  },
+  r_linear: {
+    kind: 'result',
+    test: 'linear_regression',
+    title: 'Linear regression',
+    reason: 'Models a numeric outcome from one or more predictors, with 95% confidence intervals, robust standard errors and residual diagnostics.',
+    note: 'Numeric codes for categories (1, 2, 3) are treated as numbers. Store category labels as text to get one coefficient per category.',
+  },
+  r_logistic: {
+    kind: 'result',
+    test: 'logistic_regression',
+    title: 'Logistic regression',
+    reason: 'Models the probability of a two-level outcome and reports odds ratios with 95% confidence intervals, plus AUC and calibration.',
+    note: 'The results state which outcome level counts as the event. Aim for at least 10 events per predictor.',
+  },
+  r_reg_other: {
+    kind: 'result',
+    test: null,
+    title: 'Other outcome types',
+    reason: 'Models for counts (Poisson), time-to-event (Cox) and outcomes with 3+ categories are not available yet.',
+  },
+  
   // ----- curve fitting -----
   curve_kind: {
     kind: 'question',
