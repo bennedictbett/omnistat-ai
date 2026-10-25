@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Play, AlertCircle, Upload } from 'lucide-react'
+import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
 import {
   asCurveFit,
@@ -27,6 +27,9 @@ interface Props {
 
 export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
   const roles = useMemo(() => Object.keys(spec.variables), [spec])
+  const optionalRoles = useMemo(() => new Set(spec.optional ?? []), [spec])
+  const requiredRoles = useMemo(() => roles.filter((r) => !optionalRoles.has(r)), [roles, optionalRoles])
+  const [extraRoles, setExtraRoles] = useState<string[]>([])
   const [data, setData] = useState<UploadedData | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [mapping, setMapping] = useState<Record<string, string>>({})
@@ -38,14 +41,28 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     const d = loadUploadedData()
     setData(d)
     setLoaded(true)
-    if (d) setMapping(guessColumns(roles, intentVariables, d.columns))
+    if (d) setMapping(guessColumns(requiredRoles, intentVariables, d.columns))
+    setExtraRoles([])
     setResult(null)
     setError(null)
-  }, [test, roles, intentVariables])
+  }, [test, requiredRoles, intentVariables])
 
-  const chosen = roles.map((r) => mapping[r]).filter(Boolean)
-  const allChosen = roles.every((r) => mapping[r])
+  const activeRoles = [...requiredRoles, ...extraRoles]
+  const chosen = activeRoles.map((r) => mapping[r]).filter(Boolean)
+  const allChosen = requiredRoles.every((r) => mapping[r])
   const hasDuplicate = new Set(chosen).size !== chosen.length
+  const nextOptional = roles.find((r) => optionalRoles.has(r) && !extraRoles.includes(r))
+  const addRole = () => {
+    if (nextOptional) setExtraRoles((x) => [...x, nextOptional])
+  }
+  const removeRole = (role: string) => {
+    setExtraRoles((x) => x.filter((r) => r !== role))
+    setMapping((m) => {
+      const copy = { ...m }
+      delete copy[role]
+      return copy
+    })
+  }
 
   const handleRun = async () => {
     if (!data || !allChosen || hasDuplicate) return
@@ -53,7 +70,8 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     setError(null)
     setResult(null)
     try {
-      setResult(await runRTest(test, mapping, data.rows))
+      const variables = Object.fromEntries(activeRoles.filter((r) => mapping[r]).map((r) => [r, mapping[r]]))
+      setResult(await runRTest(test, variables, data.rows))
     } catch (e) {
       setError(e instanceof RApiError ? e.message : 'Something went wrong running the analysis.')
     } finally {
@@ -87,11 +105,23 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {roles.map((role) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {activeRoles.map((role) => (
           <label key={role} className="block">
-            <span className="text-xs text-gray-500">
-              <span className="font-mono text-gray-300">{role}</span> — {spec.variables[role]}
+            <span className="flex items-center justify-between text-xs text-gray-500">
+              <span>
+                <span className="font-mono text-gray-300">{role}</span> — {spec.variables[role]}
+              </span>
+              {optionalRoles.has(role) && (
+                <button
+                  type="button"
+                  onClick={() => removeRole(role)}
+                  aria-label={`Remove ${role}`}
+                  className="text-gray-500 hover:text-red-400"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </span>
             <select
               value={mapping[role] ?? ''}
@@ -109,6 +139,16 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
           </label>
         ))}
       </div>
+
+      {nextOptional && (
+        <button
+          type="button"
+          onClick={addRole}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800"
+        >
+          <Plus size={14} /> Add another column
+        </button>
+      )}
 
       {hasDuplicate && (
         <p className="text-xs text-yellow-400">Choose a different column for each role.</p>
@@ -276,6 +316,15 @@ function Compound({ name, value }: { name: string; value: unknown }) {
             </tbody>
           </table>
         </div>
+      )
+    }
+    if (value.length > 0 && value.every((x) => typeof x === 'string')) {
+      return (
+        <ul className="text-xs text-yellow-400 space-y-1 list-disc pl-4">
+          {value.map((x, i) => (
+            <li key={i}>{String(x)}</li>
+          ))}
+        </ul>
       )
     }
     return (
