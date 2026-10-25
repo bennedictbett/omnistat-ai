@@ -51,7 +51,7 @@ export const WIZARD: Record<string, WizardNode> = {
       { label: 'Compare a numeric outcome between groups', hint: 'e.g. blood pressure in treatment vs control', next: 'groups_n' },
       { label: 'Compare two measurements on the same subjects', hint: 'e.g. before and after treatment', next: 'paired_n' },
       { label: 'See whether two numeric variables are related', hint: 'e.g. age and cholesterol', next: 'r_correlation' },
-      { label: 'Explain or predict an outcome from one or more variables', hint: 'regression, e.g. blood pressure from age and weight', next: 'reg_outcome' }
+      { label: 'Explain or predict an outcome from one or more variables', hint: 'regression, e.g. blood pressure from age and weight', next: 'reg_outcome' },
       { label: 'See whether two categories are associated', hint: 'e.g. treatment group and recovered (yes/no)', next: 'r_chi_square' },
       { label: 'Check whether a variable is normally distributed', next: 'r_shapiro' },
       { label: 'Fit a curve', hint: 'dose-response or enzyme kinetics', next: 'curve_kind' },
