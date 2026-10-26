@@ -23,6 +23,11 @@ export interface RRunResult {
   test: string
   title: string
   variables: Record<string, string>
+    /** standalone R script that reproduces the run (reads data.csv, then runs the analysis) */
+  code?: string
+  r_version?: string | null
+  /** SHA-256 of the CSV sent to R: a fingerprint of the exact data used */
+  data_sha256?: string
 }
 
 export interface UploadedData {
