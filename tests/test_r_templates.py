@@ -1,6 +1,8 @@
 """Curve-fit templates: recover known parameters from synthetic data."""
 import asyncio
 import shutil
+import re
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -290,3 +292,34 @@ def test_linear_regression_matches_numpy_reference():
         assert rows[term]["estimate"] == pytest.approx(beta[i], rel=1e-6)
         assert rows[term]["se_hc3"] == pytest.approx(se_hc3[i], rel=1e-5)
     assert out["results"]["assumption_breusch_pagan_p"] == pytest.approx(bp_p, rel=1e-4)
+
+
+@needs_r
+def test_result_includes_script_version_and_data_fingerprint():
+    df = _paired_df()
+    variables = {"first": "before", "second": "after"}
+    out = _run("paired_t_test", variables, df)
+    assert out["ok"], out["error"]
+    assert out["r_version"].startswith("R version")
+    assert "r_version_info" not in out["results"]
+    assert len(out["data_sha256"]) == 64
+    assert 'params <- list(first = "before", second = "after")' in out["code"]
+    assert "t.test(a, b, paired = TRUE)" in out["code"]
+
+    assert _run("paired_t_test", variables, df)["data_sha256"] == out["data_sha256"]
+    changed = df.copy()
+    changed.loc[0, "before"] += 1
+    assert _run("paired_t_test", variables, changed)["data_sha256"] != out["data_sha256"]
+
+
+@needs_r
+def test_exported_script_reproduces_the_result(tmp_path):
+    df = _paired_df()
+    out = _run("paired_t_test", {"first": "before", "second": "after"}, df)
+    (tmp_path / "data.csv").write_text(df[["before", "after"]].to_csv(index=False))
+    (tmp_path / "script.R").write_text(out["code"])
+    proc = subprocess.run(["Rscript", "script.R"], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    match = re.search(r"== mean_difference ==\s*\[1\]\s*(\S+)", proc.stdout)
+    assert match, proc.stdout
+    assert float(match.group(1)) == pytest.approx(out["results"]["mean_difference"], rel=1e-5)
