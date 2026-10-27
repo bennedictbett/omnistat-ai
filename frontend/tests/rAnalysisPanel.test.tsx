@@ -22,23 +22,32 @@ it('sends all uploaded rows and only confirmed columns to the same-origin R prox
   localStorage.setItem('omnistat_data', JSON.stringify({
     columns: ['bp', 'unused'], numeric_cols: ['bp'], full_data: rows,
   }))
+  const normalityPlan: AnalysisPlan = {
+    ...plan, procedure: 'shapiro_wilk', title: 'Shapiro-Wilk',
+    variables: { variable: 'bp' }, group_counts: {},
+    alternative: null, confidence_level: null, equal_variances: null,
+  }
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => normalityPlan })
   fetchMock.mockResolvedValueOnce({
     ok: true,
     json: async () => ({
       ok: true, results: { p_value: 0.4 }, error: null, plots: [], timed_out: false,
       duration_s: 0.1, test: 'shapiro_wilk', title: 'Shapiro-Wilk',
       variables: { variable: 'bp' },
+      analysis_plan: normalityPlan, data_sha256: normalityPlan.data_sha256,
     }),
   })
   render(<RAnalysisPanel test="shapiro_wilk" spec={spec} intentVariables={intentVariables} />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Run in R' }))
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
-  const [url, init] = fetchMock.mock.calls[0]
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm and Run in R' }))
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  const [url, init] = fetchMock.mock.calls[1]
   expect(url).toBe('/api/r/run')
   expect(JSON.parse(init.body)).toEqual({
     test: 'shapiro_wilk',
     variables: { variable: 'bp' },
     data: rows.map(({ bp }) => ({ bp })),
+    analysis_plan: normalityPlan,
   })
   await screen.findByText('p-value')
 })
@@ -131,4 +140,52 @@ it('rejects a result without the reviewed specification', async () => {
     }),
   })
   await expect(runRTest('independent_t_test', plan.variables, rows, plan)).rejects.toThrow('does not match')
+})
+
+it.each([
+  {
+    procedure: 'paired_t_test' as const, variables: { first: 'bp', second: 'other' },
+    equal_variances: null, alternative: 'two.sided' as const, confidence_level: 0.95 as const,
+  },
+  {
+    procedure: 'pearson_correlation' as const, variables: { x: 'bp', y: 'other' },
+    equal_variances: null, alternative: 'two.sided' as const, confidence_level: 0.95 as const,
+  },
+  {
+    procedure: 'one_way_anova' as const, variables: { outcome: 'bp', group: 'arm' },
+    equal_variances: true, alternative: null, confidence_level: 0.95 as const,
+  },
+])('reviews $procedure with procedure-specific settings before execution', async (settings) => {
+  const reviewed: AnalysisPlan = {
+    ...plan, ...settings, title: settings.procedure,
+    group_counts: settings.procedure === 'one_way_anova' ? { A: 3, B: 3, C: 4 } : {},
+  }
+  const variables = Object.values(settings.variables)
+  localStorage.setItem('omnistat_data', JSON.stringify({
+    columns: ['bp', 'other', 'arm'], numeric_cols: ['bp', 'other'],
+    full_data: rows.map((row, i) => ({ bp: row.bp, other: row.bp * 2, arm: ['A', 'B', 'C'][i % 3] })),
+  }))
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => reviewed })
+  render(<RAnalysisPanel test={settings.procedure}
+    spec={{ title: settings.procedure, variables: Object.fromEntries(Object.keys(settings.variables).map((role) => [role, role])) }}
+    intentVariables={variables} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  await screen.findByRole('region', { name: 'Analysis plan review' })
+  expect(fetchMock).toHaveBeenCalledOnce()
+  expect(screen.queryByText('Unequal variances (Welch)')).toBeNull()
+  if (settings.procedure === 'one_way_anova') {
+    expect(screen.getByText('Equal variances assumed')).toBeTruthy()
+    expect(screen.queryByText('Two-sided test')).toBeNull()
+  } else {
+    expect(screen.getByText('Two-sided test')).toBeTruthy()
+    expect(screen.queryByText(/^Groups:/)).toBeNull()
+  }
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+    ok: true, results: { p_value: 0.3 }, error: null, plots: [], timed_out: false,
+    duration_s: 0.1, test: settings.procedure, title: settings.procedure,
+    variables: settings.variables, analysis_plan: reviewed, data_sha256: reviewed.data_sha256,
+  }) })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm and Run in R' }))
+  await screen.findByText('Executed analysis specification')
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body).analysis_plan).toEqual(reviewed)
 })
