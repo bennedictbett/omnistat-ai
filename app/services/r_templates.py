@@ -494,7 +494,7 @@ def _script_for(spec: Template, variables: dict[str, str], digest: str, r_versio
         f"# Fingerprint (SHA-256) of the data sent to R: {digest}\n"
         "# Save the columns you used as data.csv next to this script. No random numbers are used.\n"
         "\n"
-        'df <- read.csv("data.csv", stringsAsFactors = FALSE)\n'
+        'df <- read.csv("data.csv", stringsAsFactors = FALSE, check.names = FALSE)\n'
         f"params <- list({params})\n"
         "# Prints each result instead of returning it to the app.\n"
         "emit <- function(name, value) {\n"
