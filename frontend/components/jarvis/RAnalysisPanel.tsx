@@ -7,6 +7,7 @@ import {
   asCurveFit,
   AnalysisPlan,
   RApiError,
+  REVIEWED_PROCEDURES,
   RRunResult,
   RTestSpec,
   UploadedData,
@@ -39,6 +40,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RRunResult | null>(null)
   const [plan, setPlan] = useState<AnalysisPlan | null>(null)
+  const needsReview = REVIEWED_PROCEDURES.some((procedure) => procedure === test)
 
   useEffect(() => {
     setExtraRoles([])
@@ -81,7 +83,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     setResult(null)
     try {
       const variables = Object.fromEntries(activeRoles.filter((r) => mapping[r]).map((r) => [r, mapping[r]]))
-      if (test === 'independent_t_test' && !plan) {
+      if (needsReview && !plan) {
         setPlan(await prepareRPlan(test, variables, data.rows))
       } else {
         setResult(await runRTest(test, variables, data.rows, plan ?? undefined))
@@ -182,17 +184,19 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
         className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-all"
       >
         {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-        {running ? 'Working…' : test === 'independent_t_test' ? (plan ? 'Confirm and Run in R' : 'Review Analysis Plan') : 'Run in R'}
+        {running ? 'Working…' : needsReview ? (plan ? 'Confirm and Run in R' : 'Review Analysis Plan') : 'Run in R'}
       </button>
 
       {plan && (
         <section aria-label="Analysis plan review" className="rounded-lg border border-blue-500/30 p-4 space-y-3 text-sm text-gray-300">
           <h3 className="font-medium text-white">Review before execution</h3>
           <p>{plan.title} · Engine: {plan.engine.toUpperCase()} · Specification {plan.schema_version}</p>
-          <p>Outcome: {plan.variables.outcome} · Group: {plan.variables.group}</p>
-          <p>{plan.rows_used} of {plan.rows_total} rows used; {plan.rows_dropped_missing} dropped for missing outcome or group.</p>
-          <p>Groups: {Object.entries(plan.group_counts).map(([group, count]) => `${group}: ${count}`).join(', ')}</p>
-          <p>Two-sided test · 95% confidence interval · Unequal variances (Welch)</p>
+          <p>{Object.entries(plan.variables).map(([role, column]) => `${role}: ${column}`).join(' · ')}</p>
+          <p>{plan.rows_used} of {plan.rows_total} rows used; {plan.rows_dropped_missing} dropped for missing selected values.</p>
+          {Object.keys(plan.group_counts).length > 0 && <p>Groups: {Object.entries(plan.group_counts).map(([group, count]) => `${group}: ${count}`).join(', ')}</p>}
+          {plan.alternative && <p>Two-sided test</p>}
+          {plan.confidence_level && <p>95% confidence intervals</p>}
+          {plan.equal_variances !== null && <p>{plan.equal_variances ? 'Equal variances assumed' : 'Unequal variances (Welch)'}</p>}
           <p className="break-all font-mono text-xs">Data SHA-256: {plan.data_sha256}</p>
           <ul className="list-disc pl-5">{plan.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
           <p>Outputs: {plan.outputs.join(', ')}</p>
