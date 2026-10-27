@@ -12,7 +12,67 @@ export interface RTestSpec {
 }
 export type RTestCatalog = Record<string, RTestSpec>
 
+export interface AnalysisPlan {
+  schema_version: '1.0'
+  procedure: 'independent_t_test'
+  engine: 'r'
+  title: string
+  variables: Record<string, string>
+  data_sha256: string
+  rows_total: number
+  rows_used: number
+  rows_dropped_missing: number
+  group_counts: Record<string, number>
+  alternative: 'two.sided'
+  confidence_level: 0.95
+  equal_variances: false
+  missing_data_policy: 'complete_cases'
+  assumptions: string[]
+  outputs: string[]
+}
+
+function isAnalysisPlan(value: unknown): value is AnalysisPlan {
+  return isRecord(value) && value.schema_version === '1.0' &&
+    value.procedure === 'independent_t_test' && value.engine === 'r' &&
+    typeof value.title === 'string' && isRecord(value.variables) &&
+    Object.values(value.variables).every((v) => typeof v === 'string') &&
+    typeof value.data_sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.data_sha256) &&
+    ['rows_total', 'rows_used', 'rows_dropped_missing'].every((key) =>
+      typeof value[key] === 'number' && Number.isInteger(value[key]) && value[key] >= 0) &&
+    isRecord(value.group_counts) && Object.values(value.group_counts).every((n) => typeof n === 'number' && Number.isInteger(n) && n >= 2) &&
+    value.alternative === 'two.sided' && value.confidence_level === 0.95 &&
+    value.equal_variances === false && value.missing_data_policy === 'complete_cases' &&
+    Array.isArray(value.assumptions) && value.assumptions.every((v) => typeof v === 'string') &&
+    Array.isArray(value.outputs) && value.outputs.every((v) => typeof v === 'string')
+}
+
+export async function prepareRPlan(
+  test: string, variables: Record<string, string>, rows: Record<string, unknown>[]
+): Promise<AnalysisPlan> {
+  let response: Response
+  try {
+    response = await fetch('/api/r/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test, variables, data: trimRows(rows, Object.values(variables)) }),
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch {
+    throw new RApiError(0, 'Could not prepare the analysis plan. Check your connection and try again.')
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new RApiError(502, 'The server returned an unreadable analysis plan.')
+  }
+  if (!response.ok) throw new RApiError(response.status, detailText(body) ?? 'Could not prepare the analysis plan.')
+  if (!isAnalysisPlan(body)) throw new RApiError(502, 'The server returned an invalid analysis plan.')
+  return body
+}
+
 export interface RRunResult {
+  analysis_plan?: AnalysisPlan
   ok: boolean
   results: Record<string, unknown>
   error: string | null
@@ -293,13 +353,15 @@ function isRRunResult(body: unknown): body is RRunResult {
     typeof body.timed_out === 'boolean' && typeof body.duration_s === 'number' &&
     (body.code === undefined || typeof body.code === 'string') &&
     (body.r_version === undefined || body.r_version === null || typeof body.r_version === 'string') &&
-    (body.data_sha256 === undefined || typeof body.data_sha256 === 'string')
+    (body.data_sha256 === undefined || typeof body.data_sha256 === 'string') &&
+    (body.analysis_plan === undefined || isAnalysisPlan(body.analysis_plan))
 }
 
 export async function runRTest(
   test: string,
   variables: Record<string, string>,
-  rows: Record<string, unknown>[]
+  rows: Record<string, unknown>[],
+  analysisPlan?: AnalysisPlan
 ): Promise<RRunResult> {
   const data = trimRows(rows, Array.from(new Set(Object.values(variables))))
 
@@ -311,7 +373,7 @@ export async function runRTest(
     res = await fetch('/api/r/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test, variables, data }),
+      body: JSON.stringify({ test, variables, data, ...(analysisPlan ? { analysis_plan: analysisPlan } : {}) }),
       signal: controller.signal,
     })
   } catch {
@@ -331,6 +393,12 @@ export async function runRTest(
     if (!isRRunResult(body)) {
       throw new RApiError(502, 'The analysis service returned an invalid result. Please try again.')
     }
+    if (analysisPlan && (
+      !body.analysis_plan || body.data_sha256 !== analysisPlan.data_sha256 ||
+      JSON.stringify(body.analysis_plan) !== JSON.stringify(analysisPlan)
+    )) {
+      throw new RApiError(502, 'The result does not match the reviewed analysis plan. Review a new plan before running again.')
+    }
     return body
   }
 
@@ -340,6 +408,8 @@ export async function runRTest(
       throw new RApiError(413, 'This dataset is too large to analyse online. Try a smaller sample of rows.')
     case 422:
       throw new RApiError(422, detail ?? 'The request was not valid for this analysis.')
+    case 409:
+      throw new RApiError(409, detail ?? 'The plan changed. Review it again before running.')
     case 429: {
       const wait = res.headers.get('Retry-After')
       throw new RApiError(429, `Too many requests. Please wait ${wait ? `${wait} seconds` : 'a moment'} and try again.`)
