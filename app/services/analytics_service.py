@@ -4,8 +4,21 @@ import logging
 import numpy as np
 import pandas as pd
 from scipy import stats
+from app.services.data_audit import audit_dataset
 
 logger = logging.getLogger("omnistat.analytics")
+
+
+def _json_finite(value):
+    if isinstance(value, dict):
+        return {key: _json_finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_finite(item) for item in value]
+    if value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+        return None
+    return value
 
 
 class AnalyticsService:
@@ -20,16 +33,23 @@ class AnalyticsService:
         else:
             df = pd.read_excel(io.BytesIO(content))
 
+        if df.empty:
+            raise ValueError("The uploaded file has no data rows")
+        df.columns = df.columns.map(str)
+        audit = audit_dataset(df)
+        # Audit the original parsed values; non-finite numeric values cannot be sent as JSON.
+        finite_numeric = df.replace([np.inf, -np.inf], np.nan)
         numeric_cols     = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
         categorical_cols = df.select_dtypes(include=["object"]).columns.tolist()
 
         numeric_stats = {
             col: {
-                "mean":   round(float(df[col].mean()),   4),
-                "median": round(float(df[col].median()), 4),
-                "std":    round(float(df[col].std()),    4),
-                "min":    round(float(df[col].min()),    4),
-                "max":    round(float(df[col].max()),    4),
+                "mean":   round(float(finite_numeric[col].mean()),   4),
+                "median": (round(float(finite_numeric[col].median()), 4)
+                           if finite_numeric[col].notna().any() else None),
+                "std":    round(float(finite_numeric[col].std()),    4),
+                "min":    round(float(finite_numeric[col].min()),    4),
+                "max":    round(float(finite_numeric[col].max()),    4),
             }
             for col in numeric_cols
         }
@@ -41,31 +61,33 @@ class AnalyticsService:
 
         histogram_data = {
             col: {
-                "counts": pd.cut(df[col], bins=10)
+                "counts": (pd.cut(finite_numeric[col].dropna(), bins=10)
                            .value_counts(sort=False)
-                           .tolist(),
-                "values": df[col].tolist(),
+                           .tolist() if finite_numeric[col].notna().any() else []),
+                "values": finite_numeric[col].tolist(),
             }
             for col in numeric_cols
         }
 
-        return {
+        result = {
+            "audit":            audit,
             "rows":             len(df),
             "columns":          list(df.columns),
             "dtypes":           df.dtypes.astype(str).to_dict(),
             "missing":          df.isnull().sum().to_dict(),
-            "preview":          df.head(5).to_dict(orient="records"),
-            "full_data":        df.to_dict(orient="records"),
+            "preview":          finite_numeric.head(5).to_dict(orient="records"),
+            "full_data":        finite_numeric.to_dict(orient="records"),
             "numeric_cols":     numeric_cols,
             "categorical_cols": categorical_cols,
             "numeric_stats":    numeric_stats,
             "categorical_stats":categorical_stats,
             "histogram_data":   histogram_data,
             "correlation": (
-                df[numeric_cols].corr().round(3).to_dict()
+                finite_numeric[numeric_cols].corr().round(3).to_dict()
                 if len(numeric_cols) > 1 else {}
             ),
         }
+        return _json_finite(result)
 
     # ── Normality ───────────────────────────────────────────────
 
