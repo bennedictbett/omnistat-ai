@@ -12,9 +12,13 @@ export interface RTestSpec {
 }
 export type RTestCatalog = Record<string, RTestSpec>
 
+export const REVIEWED_PROCEDURES = [
+  'independent_t_test', 'paired_t_test', 'one_way_anova', 'pearson_correlation', 'shapiro_wilk',
+] as const
+
 export interface AnalysisPlan {
   schema_version: '1.0'
-  procedure: 'independent_t_test'
+  procedure: (typeof REVIEWED_PROCEDURES)[number]
   engine: 'r'
   title: string
   variables: Record<string, string>
@@ -23,9 +27,9 @@ export interface AnalysisPlan {
   rows_used: number
   rows_dropped_missing: number
   group_counts: Record<string, number>
-  alternative: 'two.sided'
-  confidence_level: 0.95
-  equal_variances: false
+  alternative: 'two.sided' | null
+  confidence_level: 0.95 | null
+  equal_variances: boolean | null
   missing_data_policy: 'complete_cases'
   assumptions: string[]
   outputs: string[]
@@ -33,15 +37,17 @@ export interface AnalysisPlan {
 
 function isAnalysisPlan(value: unknown): value is AnalysisPlan {
   return isRecord(value) && value.schema_version === '1.0' &&
-    value.procedure === 'independent_t_test' && value.engine === 'r' &&
+    REVIEWED_PROCEDURES.some((test) => test === value.procedure) && value.engine === 'r' &&
     typeof value.title === 'string' && isRecord(value.variables) &&
     Object.values(value.variables).every((v) => typeof v === 'string') &&
     typeof value.data_sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.data_sha256) &&
     ['rows_total', 'rows_used', 'rows_dropped_missing'].every((key) =>
       typeof value[key] === 'number' && Number.isInteger(value[key]) && value[key] >= 0) &&
     isRecord(value.group_counts) && Object.values(value.group_counts).every((n) => typeof n === 'number' && Number.isInteger(n) && n >= 2) &&
-    value.alternative === 'two.sided' && value.confidence_level === 0.95 &&
-    value.equal_variances === false && value.missing_data_policy === 'complete_cases' &&
+    (value.alternative === 'two.sided' || value.alternative === null) &&
+    (value.confidence_level === 0.95 || value.confidence_level === null) &&
+    (typeof value.equal_variances === 'boolean' || value.equal_variances === null) &&
+    value.missing_data_policy === 'complete_cases' &&
     Array.isArray(value.assumptions) && value.assumptions.every((v) => typeof v === 'string') &&
     Array.isArray(value.outputs) && value.outputs.every((v) => typeof v === 'string')
 }
