@@ -2,15 +2,16 @@
 
 import { useState, useRef } from 'react'
 import { Upload, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
+import { ApiError, UploadResult, uploadDataset } from '@/lib/api'
 
 interface FileUploadProps {
-  onUpload: (data: any) => void
+  onUpload: (data: UploadResult) => void
 }
 
 export default function FileUpload({ onUpload }: FileUploadProps) {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -19,20 +20,12 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
     setError(null)
     setResult(null)
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/upload', {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      setResult(data)
-      console.log('Upload complete, calling onUpload with:', data)
+      const data = await uploadDataset(file)
       onUpload(data)
-    } catch {
-      setError('Failed to upload file. Make sure the API is running.')
+      setResult(data)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not save the uploaded data in this browser. Check available storage and try again.')
     } finally {
       setLoading(false)
     }
@@ -134,5 +127,4 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
     </div>
   )
 }
-
 

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { API_URL } from '@/lib/config'
 
 // Server-side proxy for the equations endpoint.
 // The browser calls /api/math/run on THIS site; this route adds the secret API key and
 // forwards to the backend. OMNISTAT_API_KEY is a server-only env var: never name it
 // NEXT_PUBLIC_*, or Next.js will ship it to the browser.
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://omnistat-ai.onrender.com'
+const BACKEND_URL = process.env.BACKEND_URL || API_URL
 const API_KEY = process.env.OMNISTAT_API_KEY
 
 // Render's free tier can take a while to wake up; allow the function to wait for it.

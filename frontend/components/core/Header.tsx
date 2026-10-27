@@ -2,6 +2,7 @@
 
 import { Activity, Wifi } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { API_URL } from '@/lib/config'
 
 export default function Header() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking')
@@ -9,7 +10,7 @@ export default function Header() {
   useEffect(() => {
     const checkApi = async () => {
       try {
-        const res = await fetch('https://omnistat-ai.onrender.com/')
+        const res = await fetch(`${API_URL}/health`)
         if (res.ok) setApiStatus('online')
         else setApiStatus('offline')
       } catch {
@@ -49,5 +50,4 @@ export default function Header() {
     </header>
   )
 }
-
 

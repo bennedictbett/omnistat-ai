@@ -1,4 +1,4 @@
-import { API_URL } from '@/lib/config'
+import { requestJson } from '@/lib/api'
 
 // ---------- Types ----------
 
@@ -84,9 +84,15 @@ export function normalizeTestName(test: string): string {
 }
 
 export async function fetchRTests(): Promise<RTestCatalog> {
-  const res = await fetch(`${API_URL}/api/r/tests`)
-  if (!res.ok) throw new RApiError(res.status, 'Could not load the list of R analyses')
-  return (await res.json()) as RTestCatalog
+  const data = await requestJson<unknown>('/api/r/tests')
+  if (!isRecord(data) || !Object.values(data).every((spec) =>
+    isRecord(spec) && typeof spec.title === 'string' && isRecord(spec.variables) &&
+    Object.values(spec.variables).every((v) => typeof v === 'string') &&
+    (spec.optional === undefined || (Array.isArray(spec.optional) && spec.optional.every((v) => typeof v === 'string')))
+  )) {
+    throw new RApiError(502, 'The server returned an invalid list of analyses. No analysis was run.')
+  }
+  return data as RTestCatalog
 }
 
 // ---------- Uploaded data ----------
@@ -98,14 +104,21 @@ export function loadUploadedData(): UploadedData | null {
     const raw = window.localStorage.getItem('omnistat_data')
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed?.columns) || !Array.isArray(parsed?.full_data)) return null
+    if (
+      !Array.isArray(parsed?.columns) || !parsed.columns.every((c: unknown) => typeof c === 'string') ||
+      !Array.isArray(parsed?.full_data) || !parsed.full_data.every(isRecord) ||
+      !Array.isArray(parsed?.numeric_cols) || !parsed.numeric_cols.every((c: unknown) => typeof c === 'string')
+    ) {
+      throw new RApiError(0, 'Saved dataset is invalid. Upload your CSV or Excel file again.')
+    }
     return {
       columns: parsed.columns as string[],
       numericCols: Array.isArray(parsed.numeric_cols) ? (parsed.numeric_cols as string[]) : [],
       rows: parsed.full_data as Record<string, unknown>[],
     }
-  } catch {
-    return null
+  } catch (e) {
+    if (e instanceof RApiError) throw e
+    throw new RApiError(0, 'Could not read the saved dataset. Check browser storage and upload your file again.')
   }
 }
 
@@ -271,6 +284,18 @@ function detailText(body: unknown): string | null {
   return null
 }
 
+function isRRunResult(body: unknown): body is RRunResult {
+  return isRecord(body) && typeof body.ok === 'boolean' && isRecord(body.results) &&
+    Array.isArray(body.plots) && body.plots.every((plot) => typeof plot === 'string') &&
+    (body.error === null || typeof body.error === 'string') &&
+    typeof body.test === 'string' && typeof body.title === 'string' &&
+    isRecord(body.variables) && Object.values(body.variables).every((v) => typeof v === 'string') &&
+    typeof body.timed_out === 'boolean' && typeof body.duration_s === 'number' &&
+    (body.code === undefined || typeof body.code === 'string') &&
+    (body.r_version === undefined || body.r_version === null || typeof body.r_version === 'string') &&
+    (body.data_sha256 === undefined || typeof body.data_sha256 === 'string')
+}
+
 export async function runRTest(
   test: string,
   variables: Record<string, string>,
@@ -302,7 +327,12 @@ export async function runRTest(
     // non-JSON body (e.g. a platform error page)
   }
 
-  if (res.ok) return body as RRunResult
+  if (res.ok) {
+    if (!isRRunResult(body)) {
+      throw new RApiError(502, 'The analysis service returned an invalid result. Please try again.')
+    }
+    return body
+  }
 
   const detail = detailText(body)
   switch (res.status) {

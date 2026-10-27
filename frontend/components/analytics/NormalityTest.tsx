@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { BarChart2, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { ApiError, requestJson } from '@/lib/api'
 
 export default function NormalityTest() {
   const [values, setValues] = useState('')
@@ -26,15 +27,14 @@ export default function NormalityTest() {
     }
 
     try {
-      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/normality', {
+      const data = await requestJson('/api/analytics/normality', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: parsed })
       })
-      const data = await res.json()
       setResult(data)
-    } catch {
-      setError('Failed to connect to API')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to run the normality test.')
     } finally {
       setLoading(false)
     }
@@ -138,5 +138,4 @@ export default function NormalityTest() {
     </div>
   )
 }
-
 

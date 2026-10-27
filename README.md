@@ -111,6 +111,37 @@ npm run dev
 
 Open `http://localhost:3000`
 
+### Backend Selection and Uploaded-Data Analyses
+
+Browser requests use `NEXT_PUBLIC_API_URL`; the default remains the hosted
+OmniStat API. To work against your local backend, create `frontend/.env.local`
+(ignored by Git) with:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:8000
+BACKEND_URL=http://localhost:8000
+OMNISTAT_API_KEY=replace-with-your-local-key
+```
+
+Set `OMNISTAT_API_KEYS` to the same key in the backend's `.env`. Never prefix
+the secret key with `NEXT_PUBLIC_`. R, math and voice use Next.js server-side
+proxies, which add this key; `BACKEND_URL` overrides their destination and
+otherwise defaults to `NEXT_PUBLIC_API_URL`. Keep both URLs pointed at the same
+backend. Restart Next.js after changing environment variables; production public
+URLs are set at build time.
+
+Uploads are checked before being saved. In Jarvis, a supported recommendation
+opens a column picker; the user confirms columns and runs the curated R analysis
+on the full uploaded dataset. Unsupported procedures, incomplete AI plans,
+ambiguous questions and unavailable catalogs show a message instead of running
+sample data or silently substituting another statistical test. The Test Wizard
+can select supported analyses without the AI model.
+
+Descriptive statistics use all uploaded rows, not just the five-row preview,
+excluding non-finite/non-numeric values in the selected column. The separate
+Normality and Survival tabs remain manual-entry tools; they do not automatically
+select uploaded columns.
+
 ### Development Checks (macOS/Linux)
 
 Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored
@@ -124,6 +155,7 @@ python -m pytest -q
 
 cd frontend
 npm ci
+npm test
 npm run build
 ```
 
@@ -170,8 +202,8 @@ Pull requests and pushes to `master` run two checks:
   Hugging Face offline mode prevents accidental model downloads during tests.
   Native prerequisite checks fail explicitly if required R/Opus/MP3 support is
   missing, and pytest reports any remaining skips.
-- **Frontend:** Node.js 22, `npm ci` and `npm run build`, including Next.js lint and
-  TypeScript checks.
+- **Frontend:** Node.js 22, `npm ci`, `npm test` for uploaded-data workflow
+  regressions, and `npm run build`, including Next.js lint and TypeScript checks.
 
 To require these checks before merging, configure a GitHub branch protection rule
 or ruleset for `master`; the workflow alone does not enforce merge protection.
