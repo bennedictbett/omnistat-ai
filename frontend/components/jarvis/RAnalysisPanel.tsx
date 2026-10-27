@@ -38,13 +38,19 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
   const [result, setResult] = useState<RRunResult | null>(null)
 
   useEffect(() => {
-    const d = loadUploadedData()
-    setData(d)
-    setLoaded(true)
-    if (d) setMapping(guessColumns(requiredRoles, intentVariables, d.columns))
     setExtraRoles([])
     setResult(null)
     setError(null)
+    try {
+      const d = loadUploadedData()
+      setData(d)
+      if (d) setMapping(guessColumns(requiredRoles, intentVariables, d.columns))
+    } catch (e) {
+      setData(null)
+      setError(e instanceof RApiError ? e.message : 'Could not read the uploaded data. Upload your file again.')
+    } finally {
+      setLoaded(true)
+    }
   }, [test, requiredRoles, intentVariables])
 
   const activeRoles = [...requiredRoles, ...extraRoles]
@@ -86,7 +92,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-5 flex items-start gap-3">
         <Upload size={18} className="text-yellow-400 mt-0.5 shrink-0" />
         <div>
-          <p className="text-sm font-medium text-yellow-400">Upload your data first</p>
+          <p role={error ? 'alert' : undefined} className="text-sm font-medium text-yellow-400">{error ?? 'Upload your data first'}</p>
           <p className="text-xs text-gray-400 mt-1">
             {spec.title} runs on your own file. Open <span className="text-white">Upload Data</span> in the
             sidebar, add a CSV or Excel file, then come back and run this analysis.
