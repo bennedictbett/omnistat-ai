@@ -142,16 +142,17 @@ excluding non-finite/non-numeric values in the selected column. The separate
 Normality and Survival tabs remain manual-entry tools; they do not automatically
 select uploaded columns.
 
-### Analysis Plan Review (First Milestone)
+### Analysis Plan Review
 
-The independent-groups t-test now has an explicit review step in both Jarvis and
+The independent-groups t-test, paired t-test, one-way ANOVA, Pearson correlation
+and Shapiro-Wilk normality test have an explicit review step in both Jarvis and
 the Test Wizard's shared column picker:
 
 1. Choose the outcome and grouping columns, then select **Review Analysis Plan**.
 2. The backend prepares a version `1.0` specification without executing R.
-3. Review the Welch procedure, R engine, column mappings, full selected-data
-   SHA-256, total/complete/excluded row counts, group sizes, fixed two-sided
-   alternative, 95% confidence level, assumptions and expected outputs.
+3. Review the selected procedure, R engine, column mappings, full selected-data
+   SHA-256, total/complete/excluded row counts, group sizes (where applicable),
+   procedure-specific settings, assumptions and expected outputs.
 4. Select **Confirm and Run in R**, or cancel. Changing columns invalidates the
    review. Independence is a study-design requirement, not an automatic check.
 5. The backend regenerates and compares the plan before execution. Changed data
@@ -165,12 +166,28 @@ The browser uses the server-side `/api/r/plan` proxy; no API key is exposed.
 The SHA-256 covers selected columns in canonical role order, including rows later
 excluded for missing values; it is not a fingerprint of unrelated dataset columns.
 
-This milestone supports only `independent_t_test` plans. Other analyses retain
-their existing run flow. Existing API clients may still run without a plan for
+Other analyses retain their existing run flow. Existing API clients may still run without a plan for
 backwards compatibility; this is a UI review and consistency check, not a stored
 approval record or audit log. R version remains part of the execution result,
 not the pre-execution plan. Parameters are fixed to the existing curated template;
 the review does not yet support editing alpha, confidence level or alternatives.
+Plans retain schema version `1.0` and the existing Welch plan shape. For the added
+procedures, inapplicable settings are explicitly `null`, and non-group analyses
+have empty group counts:
+
+| Procedure | Settings and pre-execution checks |
+|-----------|-----------------------------------|
+| Independent t-test | Welch, two-sided, 95% CI; exactly two groups with at least two complete rows each |
+| Paired t-test | Two-sided, 95% CI; at least three complete pairs, nonconstant first-minus-second differences; matching is a user-confirmed study-design requirement |
+| One-way ANOVA | Equal variances assumed, Tukey HSD 95% intervals; at least three groups with two complete rows each and nonzero within-group variation |
+| Pearson correlation | Two-sided, 95% CI; at least four complete pairs and nonconstant numeric columns; Spearman comparison is disclosed |
+| Shapiro-Wilk | 3–5000 complete, nonconstant numeric values; alpha 0.05 decision and Q-Q plot, no confidence interval or directional alternative |
+
+Plan review rejects nonnumeric or infinite selected values before execution.
+Rows missing any selected value are excluded together, preserving paired
+observations. Assumptions are disclosed, not certified automatically. The ANOVA
+review deliberately requires replicated groups to make its diagnostics meaningful;
+legacy requests without a plan retain the existing template validation.
 Use numeric group codes or non-numeric text labels. Numeric-looking text codes
 and the literal text label `NA` must be recoded before review to avoid R CSV
 type inference changing group membership.

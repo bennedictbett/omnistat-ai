@@ -82,7 +82,7 @@ def test_invalid_roles_are_rejected(client, body, variables):
 
 
 def test_unsupported_procedures_and_invalid_groups_are_rejected(client, body):
-    assert post(client, "plan", {**body, "test": "shapiro_wilk"}).status_code == 422
+    assert post(client, "plan", {**body, "test": "cox_regression"}).status_code == 422
     body["data"][0]["arm"] = "C"
     assert post(client, "plan", body).status_code == 422
     body["data"] = [{"bp": 1, "arm": "A"}, {"bp": 2, "arm": "B"}]
@@ -136,3 +136,68 @@ def test_ambiguous_csv_group_labels_require_explicit_recoding(client, body, labe
     for row in body["data"]:
         row["arm"] = labels[0] if row["arm"] == "A" else labels[1]
     assert post(client, "plan", body).status_code == 422
+
+
+CASES = [
+    ("paired_t_test", {"first": "a", "second": "b"},
+     [{"a": 1, "b": 2}, {"a": 3, "b": 5}, {"a": 6, "b": 7}, {"a": 8, "b": 12}]),
+    ("pearson_correlation", {"x": "a", "y": "b"},
+     [{"a": 1, "b": 2}, {"a": 3, "b": 5}, {"a": 6, "b": 7}, {"a": 8, "b": 12}]),
+    ("shapiro_wilk", {"variable": "a"}, [{"a": 1}, {"a": 3}, {"a": 6}, {"a": 8}]),
+    ("one_way_anova", {"outcome": "a", "group": "g"},
+     [{"a": 1, "g": "A"}, {"a": 3, "g": "A"}, {"a": 5, "g": "B"},
+      {"a": 8, "g": "B"}, {"a": 4, "g": "C"}, {"a": 9, "g": "C"}]),
+]
+
+
+@pytest.mark.parametrize("test,variables,rows", CASES)
+def test_extended_plans_count_complete_cases_and_canonicalize_roles(client, test, variables, rows):
+    body = {"test": test, "variables": variables, "data": rows + [{}]}
+    response = post(client, "plan", body)
+    assert response.status_code == 200, response.text
+    plan = response.json()
+    assert plan["procedure"] == test
+    assert plan["rows_used"] == len(rows) and plan["rows_dropped_missing"] == 1
+    assert plan["equal_variances"] == (True if test == "one_way_anova" else None)
+    assert plan["alternative"] == (None if test in ("shapiro_wilk", "one_way_anova") else "two.sided")
+    assert plan["confidence_level"] == (None if test == "shapiro_wilk" else 0.95)
+    body["variables"] = dict(reversed(list(variables.items())))
+    assert post(client, "plan", body).json() == plan
+
+
+@pytest.mark.parametrize("test,variables,rows", CASES)
+def test_extended_plan_changes_are_rejected_without_execution(client, monkeypatch, test, variables, rows):
+    body = {"test": test, "variables": variables, "data": rows}
+    plan = post(client, "plan", body).json()
+    runner = AsyncMock()
+    monkeypatch.setattr(r_analysis, "run_named_test", runner)
+    plan["outputs"] = []
+    assert post(client, "run", {**body, "analysis_plan": plan}).status_code == 409
+    runner.assert_not_awaited()
+
+
+@pytest.mark.skipif(shutil.which("Rscript") is None, reason="Rscript not installed")
+@pytest.mark.parametrize("test,variables,rows", CASES)
+def test_extended_plan_executes_matching_r_template(client, test, variables, rows):
+    body = {"test": test, "variables": variables, "data": rows}
+    plan = post(client, "plan", body).json()
+    response = post(client, "run", {**body, "analysis_plan": plan})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["ok"], result["error"]
+    assert result["analysis_plan"] == plan
+    assert result["data_sha256"] == plan["data_sha256"]
+
+
+@pytest.mark.parametrize("test,variables,rows", [
+    ("paired_t_test", {"first": "a", "second": "b"}, [{"a": 1, "b": 2}] * 4),
+    ("pearson_correlation", {"x": "a", "y": "b"}, [{"a": 1, "b": n} for n in range(4)]),
+    ("pearson_correlation", {"x": "a", "y": "b"}, [{"a": n, "b": n} for n in range(3)]),
+    ("shapiro_wilk", {"variable": "a"}, [{"a": 1}] * 4),
+    ("shapiro_wilk", {"variable": "a"}, [{"a": n} for n in range(5001)]),
+    ("shapiro_wilk", {"variable": "a"}, [{"a": "x"}, {"a": "y"}, {"a": "z"}]),
+    ("one_way_anova", {"outcome": "a", "group": "g"},
+     [{"a": 1, "g": "A"}, {"a": 2, "g": "B"}, {"a": 3, "g": "C"}]),
+])
+def test_extended_plan_rejects_invalid_data(client, test, variables, rows):
+    assert post(client, "plan", {"test": test, "variables": variables, "data": rows}).status_code == 422
