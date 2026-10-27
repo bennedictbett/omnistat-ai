@@ -70,9 +70,11 @@ FastAPI Backend (Python)
 ## Getting Started
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.11 (recommended for the pinned backend dependencies)
 - Node.js 18+
 - A free [Groq API key](https://console.groq.com)
+- R with the `jsonlite` package for R analyses
+- FFmpeg for the voice test suite
 
 ### Backend Setup
 
@@ -108,6 +110,71 @@ npm run dev
 ```
 
 Open `http://localhost:3000`
+
+### Development Checks (macOS/Linux)
+
+Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored
+by Git.
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+
+cd frontend
+npm ci
+npm run build
+```
+
+R-dependent tests are skipped when `Rscript` is unavailable; audio fixtures require
+FFmpeg with `libopus`, `libmp3lame`, FLAC and PCM encoding support. Use
+`python -m pytest -q -ra` to see skip reasons.
+
+Agent unit tests replace the intent classifier with deterministic predictions and
+mock Groq requests, so they need neither private model access nor API keys. These
+tests cover routing, clarification, SDK request compatibility and the existing
+classifier-only fallback when Groq fails; they do not measure model accuracy.
+Running the real classifier separately requires the model in `models/intent_model/`
+or access to the Hugging Face repository configured by `HF_MODEL_REPO` and, for
+private models, `HF_TOKEN`.
+
+On macOS, install the native tools and the R JSON dependency with:
+
+```bash
+brew install r ffmpeg
+Rscript -e 'install.packages("jsonlite", repos="https://cloud.r-project.org")'
+```
+
+On macOS, the R and math workers retain CPU, file-size and wall-clock limits but
+skip the unsupported address-space limit (`RLIMIT_AS`) and log a warning.
+Use a Linux container for memory-limited execution; these controls alone are not
+a security sandbox. Linux retains the configured address-space limit. The R
+executable is resolved from your shell's `PATH` (including Homebrew); alternatively,
+set `RSCRIPT_BIN` to its absolute path.
+
+Run the focused worker checks with:
+
+```bash
+python -m pytest -q tests/test_worker_portability.py tests/test_math.py tests/test_r_runner.py tests/test_r_templates.py tests/test_r_security.py
+```
+
+The Ogg recognition fixture uses Opus, the same encoder as the WebM fixture, so
+Vorbis support is not required.
+
+### Continuous Integration
+
+Pull requests and pushes to `master` run two checks:
+
+- **Backend:** Python 3.11, R with `jsonlite`, FFmpeg and the full pytest suite.
+  Hugging Face offline mode prevents accidental model downloads during tests.
+  Native prerequisite checks fail explicitly if required R/Opus/MP3 support is
+  missing, and pytest reports any remaining skips.
+- **Frontend:** Node.js 22, `npm ci` and `npm run build`, including Next.js lint and
+  TypeScript checks.
+
+To require these checks before merging, configure a GitHub branch protection rule
+or ruleset for `master`; the workflow alone does not enforce merge protection.
 
 ---
 
