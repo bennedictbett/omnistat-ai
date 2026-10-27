@@ -8,6 +8,22 @@ import pytest
 
 from app.agents import analyst_agent
 from app.agents.analyst_agent import AnalystAgent
+from app.ml.predict import Prediction, PredictResult
+
+
+@pytest.fixture(autouse=True)
+def classifier(monkeypatch):
+    """Keep agent unit tests independent of model files, credentials and network."""
+    prediction = Prediction(intent="compare_two_groups", confidence=0.95, source="model")
+    result = PredictResult(
+        top1=prediction,
+        top3=[prediction],
+        raw_query="compare two groups",
+        low_confidence=False,
+    )
+    monkeypatch.setattr(analyst_agent, "classify", lambda query: result)
+    monkeypatch.delenv("GROQ_INTENT_MODELS", raising=False)
+    return result
 
 
 class StatusError(Exception):
@@ -91,12 +107,29 @@ def test_401_stops_immediately_and_logs_key_problem(caplog):
     assert "GROQ_API_KEY" in caplog.text
 
 
-def test_all_models_fail_returns_failure_and_logs_reasons(caplog):
+def test_all_models_fail_returns_classifier_fallback_and_logs_reasons(caplog):
     agent, calls = make_agent([StatusError(404, "model not found"), StatusError(404, "model not found")])
     with caplog.at_level(logging.WARNING, logger="omnistat.agent"):
         r = run(agent)
-    assert r == {"success": False, "error": "Failed to parse intent — try rephrasing your query"}
+    assert r["success"] and r["groq_failed"]
+    assert r["intent"] == {"test": "compare_two_groups"}
+    assert r["family"] == "compare_two_groups"
+    assert r["route"] == "/analytics/compare-groups"
+    assert r["model_used"] is None
     assert "model not found" in caplog.text and len(calls) == 2
+
+
+def test_low_confidence_returns_options_without_calling_groq(classifier):
+    classifier.low_confidence = True
+    classifier.top1.confidence = 0.38
+    agent, calls = make_agent([])
+
+    r = run(agent)
+
+    assert r["success"] and r["needs_clarification"]
+    assert r["options"] == [{"intent": "compare_two_groups", "confidence": 0.38}]
+    assert r["raw_query"] == "compare two groups"
+    assert calls == []
 
 
 def test_models_can_be_overridden_by_env(monkeypatch):
