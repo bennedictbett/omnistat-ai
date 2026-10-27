@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
+import ReproducibilityBundle from '@/components/reports/ReproducibilityBundle'
 import {
   asCurveFit,
   AnalysisPlan,
@@ -218,6 +219,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       )}
 
       {result && <ResultView result={result} />}
+      {result && <ReproducibilityBundle key={JSON.stringify(result.variables)} result={result} rows={data.rows} />}
       {result?.analysis_plan && (
         <details className="text-xs text-gray-400">
           <summary>Executed analysis specification</summary>
