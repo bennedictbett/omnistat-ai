@@ -1,30 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ApiError, requestJson } from '@/lib/api'
+import { loadUploadedData, RApiError, UploadedData } from '@/lib/rApi'
 
 export default function DescriptiveStats() {
-  const [uploadedData, setUploadedData] = useState<any>(null)
+  const [uploadedData, setUploadedData] = useState<UploadedData | null>(null)
   const [selectedCol, setSelectedCol] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const saved = localStorage.getItem('omnistat_data')
-    if (saved) {
-      const data = JSON.parse(saved)
-      setUploadedData(data)
-      const firstNumeric = data.columns.find((col: string) =>
-        data.dtypes[col]?.includes('int') || data.dtypes[col]?.includes('float')
-      )
-      if (firstNumeric) setSelectedCol(firstNumeric)
+    try {
+      const data = loadUploadedData()
+      if (data) {
+        setUploadedData(data)
+        const firstNumeric = data.numericCols[0]
+        if (firstNumeric) setSelectedCol(firstNumeric)
+      }
+    } catch (e) {
+      setError(e instanceof RApiError ? e.message : 'Could not read the uploaded data. Upload your file again.')
     }
   }, [])
 
-  const numericColumns = uploadedData?.columns.filter((col: string) =>
-    uploadedData.dtypes[col]?.includes('int') ||
-    uploadedData.dtypes[col]?.includes('float')
-  ) || []
+  const numericColumns = uploadedData?.numericCols ?? []
 
   const handleRun = async () => {
     if (!selectedCol || !uploadedData) return
@@ -32,20 +32,25 @@ export default function DescriptiveStats() {
     setError(null)
     setResult(null)
 
-    const values = uploadedData.preview
-      .map((row: any) => row[selectedCol])
-      .filter((v: any) => v !== null && v !== undefined)
+    const values = uploadedData.rows
+      .map((row) => row[selectedCol])
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+
+    if (values.length === 0) {
+      setError('The selected column has no finite numeric values to analyze.')
+      setLoading(false)
+      return
+    }
 
     try {
-      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/descriptive', {
+      const data = await requestJson('/api/analytics/descriptive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values, column: selectedCol })
       })
-      const data = await res.json()
       setResult(data)
-    } catch {
-      setError('Failed to connect to API')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to run descriptive statistics.')
     } finally {
       setLoading(false)
     }
@@ -55,7 +60,7 @@ export default function DescriptiveStats() {
     return (
       <div className="max-w-3xl mx-auto">
         <div className="flex flex-col items-center justify-center h-64 bg-gray-900 border border-gray-800 border-dashed rounded-xl gap-4">
-          <p className="text-white font-medium">No data loaded</p>
+          <p role={error ? 'alert' : undefined} className="text-white font-medium">{error ?? 'No data loaded'}</p>
           <p className="text-sm text-gray-500">Go to Upload Data first</p>
         </div>
       </div>
@@ -88,7 +93,7 @@ export default function DescriptiveStats() {
             {loading ? 'Running...' : 'Analyze'}
           </button>
         </div>
-        <p className="text-xs text-gray-600">{uploadedData.rows} rows loaded</p>
+        <p className="text-xs text-gray-600">{uploadedData.rows.length} rows loaded. All rows are used, excluding missing or non-numeric values in the selected column.</p>
       </div>
 
       {error && (
@@ -139,5 +144,3 @@ export default function DescriptiveStats() {
     </div>
   )
 }
-
-
