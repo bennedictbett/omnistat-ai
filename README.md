@@ -170,6 +170,53 @@ the dashboard explicitly says the audit is unavailable and requests a fresh
 upload. Invalid audit versions or structures are reported rather than shown as
 clean. No raw values are logged by these checks.
 
+### Reproducibility ZIP Export
+
+After a successful R analysis, the shared analysis panel offers **Download ZIP**.
+Read the sensitive-data warning and check the authorization box first. Nothing is
+exported automatically or saved to account history. Export sends the selected
+rows and the result snapshot back to the configured analysis server to verify
+their consistency; it does not rerun R.
+
+The archive contains:
+
+- `data.csv`: the exact selected-column CSV sent to R, including rows later
+  excluded for missing values, but not unrelated columns or the original workbook.
+- `analysis.R`: the standalone curated R script, preserving original column names.
+- `results.json`: the original result snapshot, including outputs and charts.
+- `analysis-plan.json`: the executed reviewed plan, when present.
+- `plots/plot-01.png`, etc.: the original PNG charts.
+- `manifest.json`: R version, selected columns, row count and SHA-256/byte counts
+  for the data, script, result, optional plan and charts.
+- `README.txt`: privacy warnings and rerun instructions.
+
+**Privacy:** selected data, results, console output and charts can contain
+patient-level information or identifiers. Store and share the ZIP only with
+appropriate authorization. The export does not deliberately attach API keys or
+passwords, but cannot remove sensitive values present in the selected data or
+results.
+
+Extract into a private folder, review the script, and run `Rscript analysis.R`
+from that folder using the R version recorded in the manifest. The curated
+scripts use standard/recommended R packages and install nothing. Numerical
+results print to the terminal; plots go to `Rplots.pdf`. Rerunning does not
+overwrite the saved `results.json`. Plot appearance and low-order numerical
+digits may differ across R/platform versions.
+
+`POST /api/r/bundle` accepts `{result, data}` and uses the same API-key and
+rate-limit controls as `/api/r/run`. Its browser-facing Next.js proxy uses the
+existing server-only `OMNISTAT_API_KEY` and `BACKEND_URL` (or `API_URL`) settings.
+Responses are ZIP downloads with `Cache-Control: no-store`. The browser limits
+the serialized request to 4,000,000 bytes for hosted request limits; the backend
+limits total uncompressed archive contents to 20 MiB, with up to 100 charts and
+8 MiB of base64 per chart.
+
+Changed data, code or reviewed plans, failed/timed-out analyses, missing R
+versions and invalid chart encodings are rejected explicitly. Older results
+without complete metadata must be rerun before export. **This is a user-supplied
+snapshot, not a signed server attestation:** hashes help check file consistency
+but do not prove that the numerical results came from an authentic server run.
+
 ### Analysis Plan Review
 
 The independent-groups t-test, paired t-test, one-way ANOVA, Pearson correlation
