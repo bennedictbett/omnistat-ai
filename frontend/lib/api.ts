@@ -1,4 +1,5 @@
 import { API_URL } from './config'
+import { DataAudit, isDataAudit } from './dataAudit'
 
 export class ApiError extends Error {}
 
@@ -20,6 +21,7 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
 }
 
 export interface UploadResult {
+  audit?: DataAudit
   rows: number
   columns: string[]
   numeric_cols: string[]
@@ -42,11 +44,16 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
 }
 
 function isUploadResult(data: unknown): data is UploadResult {
-  return isRecord(data) && typeof data.rows === 'number' && Number.isInteger(data.rows) && data.rows > 0 &&
-    Array.isArray(data.columns) && data.columns.length > 0 && data.columns.every((c) => typeof c === 'string') &&
+  if (!isRecord(data)) return false
+  const columns = data.columns
+  return typeof data.rows === 'number' && Number.isInteger(data.rows) && data.rows > 0 &&
+    Array.isArray(columns) && columns.length > 0 && columns.every((c) => typeof c === 'string') &&
     Array.isArray(data.numeric_cols) && data.numeric_cols.every((c) => typeof c === 'string') &&
     Array.isArray(data.full_data) && data.full_data.length === data.rows && data.full_data.every(isRecord) &&
-    isRecord(data.missing) && Object.values(data.missing).every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)
+    isRecord(data.missing) && Object.values(data.missing).every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0) &&
+    (data.audit === undefined || (isDataAudit(data.audit) && data.audit.rows === data.rows &&
+      data.audit.columns.length === columns.length &&
+      data.audit.columns.every((column, index) => column.column === columns[index])))
 }
 
 export interface JarvisIntent {
