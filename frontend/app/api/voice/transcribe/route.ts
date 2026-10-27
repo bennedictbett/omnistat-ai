@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { API_URL } from '@/lib/config'
 
 // Server-side proxy for voice transcription.
 // The browser posts a short recording to /api/voice/transcribe on THIS site; this route adds
@@ -6,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // env var: never name it NEXT_PUBLIC_*, or Next.js will ship it to the browser.
 // The recording is passed straight through and is not stored or logged here.
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://omnistat-ai.onrender.com'
+const BACKEND_URL = process.env.BACKEND_URL || API_URL
 const API_KEY = process.env.OMNISTAT_API_KEY
 
 // Vercel rejects request bodies over 4.5 MB, so refuse early with a readable message.
