@@ -142,6 +142,34 @@ excluding non-finite/non-numeric values in the selected column. The separate
 Normality and Survival tabs remain manual-entry tools; they do not automatically
 select uploaded columns.
 
+### Upload Data-Quality Audit
+
+The upload API returns an additive `audit` object (version `1.0`), displayed above
+the Data Dashboard tabs. It reports:
+
+- Missing count and percentage per column, using pandas CSV/Excel missing-value
+  parsing. Whitespace-only strings are counted separately as blank text.
+- Exact duplicate rows beyond the first occurrence across all parsed columns.
+  These are not necessarily duplicate patients and are never removed automatically.
+- Entirely empty columns (missing or blank text) and columns constant among
+  populated cells. Empty columns are not also marked constant.
+- Numeric-looking text columns: at least 80% of populated cells must be text
+  parsable as finite numbers. This is a review flag, not an instruction to convert
+  identifiers or codes, and it does not change inferred column types.
+- Infinite numeric values, counted before serialization. JSON cannot represent
+  NaN or infinity: undefined statistics and missing/infinite numeric cells become
+  `null`; summaries, histograms and correlations use finite numeric values.
+
+The audit itself does not mutate the parsed dataset, delete duplicate rows or
+convert text columns. CSV/Excel import still applies pandas' normal type inference
+and missing-value conventions. It does not certify statistical assumptions.
+Empty files or header-only datasets return HTTP 422.
+
+Previously saved datasets and older backends without an audit remain usable, but
+the dashboard explicitly says the audit is unavailable and requests a fresh
+upload. Invalid audit versions or structures are reported rather than shown as
+clean. No raw values are logged by these checks.
+
 ### Analysis Plan Review
 
 The independent-groups t-test, paired t-test, one-way ANOVA, Pearson correlation

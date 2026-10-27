@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Database, Upload } from 'lucide-react'
+import DataQualityAudit from './DataQualityAudit'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, ResponsiveContainer, ScatterChart,
@@ -76,6 +77,7 @@ export default function DataSummary({ data }: DataSummaryProps) {
       </div>
 
       {/* Section tabs */}
+      <DataQualityAudit audit={data.audit} />
       <div className="flex gap-2">
         {sections.map((s) => (
           <button
@@ -328,5 +330,4 @@ export default function DataSummary({ data }: DataSummaryProps) {
     </div>
   )
 }
-
 
