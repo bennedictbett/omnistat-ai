@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Activity, Loader2 } from 'lucide-react'
+import { ApiError, requestJson } from '@/lib/api'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 export default function SurvivalCurve() {
@@ -27,7 +28,7 @@ export default function SurvivalCurve() {
     }
 
     try {
-      const res = await fetch('https://omnistat-ai.onrender.com/api/analytics/survival', {
+      const data = await requestJson('/api/analytics/survival', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -36,10 +37,9 @@ export default function SurvivalCurve() {
           label
         })
       })
-      const data = await res.json()
       setResult(data)
-    } catch {
-      setError('Failed to connect to API')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to run the survival analysis.')
     } finally {
       setLoading(false)
     }
@@ -170,5 +170,4 @@ export default function SurvivalCurve() {
     </div>
   )
 }
-
 
