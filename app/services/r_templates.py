@@ -11,6 +11,8 @@ returns results with emit("name", value). Plots are captured automatically.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 
 import pandas as pd
@@ -29,6 +31,7 @@ class Template:
     title: str
     roles: dict[str, str]  # role -> human description
     code: str
+    optional_roles: tuple[str, ...] = ()  # roles the caller may leave out
 
 
 _TWO_GROUP_PREP = r"""
@@ -79,6 +82,36 @@ _PAIRED_ROLES = {
     "first": "numeric column: first measurement (e.g. before)",
     "second": "numeric column: second measurement (e.g. after)",
 }
+_REG_ROLES = {
+    "outcome": "outcome column",
+    "predictor_1": "first predictor column",
+    **{f"predictor_{i}": f"predictor column {i} (optional)" for i in range(2, 7)},
+}
+_REG_OPTIONAL = tuple(f"predictor_{i}" for i in range(2, 7))
+
+# Column names never reach the R parser: variables are renamed to y, x1, x2... and mapped back for display.
+_REG_PREP = r"""
+pnames <- sort(names(params)[grepl("^predictor_", names(params))])
+preds <- unname(unlist(params[pnames]))
+if (length(preds) < 1) stop("Choose at least one predictor")
+if (anyDuplicated(c(params$outcome, preds))) stop("Each variable can be used only once")
+d0 <- df[c(params$outcome, preds)]
+names(d0) <- c("y", paste0("x", seq_along(preds)))
+n_total <- nrow(d0)
+d <- d0[complete.cases(d0), , drop = FALSE]
+n_used <- nrow(d)
+if (n_used < length(preds) + 10) stop("Not enough complete rows for this many predictors (need at least 10 more rows than predictors)")
+for (nm in names(d)[-1]) {
+  if (is.character(d[[nm]]) || is.logical(d[[nm]])) d[[nm]] <- factor(d[[nm]])
+  if (length(unique(d[[nm]])) < 2) stop(paste("Predictor", preds[as.integer(sub("x", "", nm))], "has only one distinct value after removing missing rows"))
+}
+term_label <- function(fit) {
+  asg <- attr(model.matrix(fit), "assign")
+  mapply(function(n, k) if (k == 0) n else sub(paste0("^x", k), preds[k], n),
+         names(coef(fit)), asg, USE.NAMES = FALSE)
+}
+collinear_msg <- "Some predictors are perfectly collinear (one is a combination of the others). Remove one and try again."
+"""
 TEMPLATES: dict[str, Template] = {
     "independent_t_test": Template(
         "Independent samples t-test (Welch)",
@@ -336,12 +369,146 @@ emit("groups", data.frame(group = levels(g), n = as.integer(table(g)),
 boxplot(y ~ g, xlab = params$group, ylab = params$outcome, main = "Outcome by group")
 """,
     ),
+        "linear_regression": Template(
+        "Linear regression (OLS)",
+        _REG_ROLES,
+        _REG_PREP + r"""
+if (!is.numeric(d$y)) stop("Outcome must be numeric for linear regression")
+fit <- lm(y ~ ., data = d)
+if (anyNA(coef(fit))) stop(collinear_msg)
+s <- summary(fit); cf <- coef(s); ci <- confint(fit); lab <- term_label(fit)
+X <- model.matrix(fit); h <- pmin(hatvalues(fit), 1 - 1e-8); e <- residuals(fit)
+XtXi <- solve(crossprod(X))
+V3 <- XtXi %*% crossprod(X * (e / (1 - h))) %*% XtXi   # HC3 robust covariance
+se3 <- sqrt(diag(V3))
+p3 <- 2 * pt(abs(cf[, 1] / se3), fit$df.residual, lower.tail = FALSE)
+e2 <- e^2
+aux <- summary(lm(e2 ~ X[, -1, drop = FALSE]))          # Koenker's studentized Breusch-Pagan
+bp_p <- pchisq(n_used * aux$r.squared, ncol(X) - 1, lower.tail = FALSE)
+fs <- s$fstatistic
+emit("test", "Linear regression (OLS); p-value is the overall F-test")
+emit("statistic_F", unname(fs[1]))
+emit("df_model", unname(fs[2]))
+emit("df_residual", unname(fs[3]))
+emit("p_value", unname(pf(fs[1], fs[2], fs[3], lower.tail = FALSE)))
+emit("r_squared", s$r.squared)
+emit("adj_r_squared", s$adj.r.squared)
+emit("rmse", s$sigma)
+emit("n_used", n_used)
+emit("n_dropped_missing", n_total - n_used)
+emit("coefficients", data.frame(term = lab, estimate = cf[, 1], se = cf[, 2], t = cf[, 3], p_value = cf[, 4],
+     ci_lwr = ci[, 1], ci_upr = ci[, 2], se_hc3 = se3, p_hc3 = p3, row.names = NULL))
+emit("assumption_shapiro_p_residuals", if (n_used <= 5000 && sd(e) > 0) shapiro.test(e)$p.value else NA)
+emit("assumption_breusch_pagan_p", bp_p)
+emit("n_high_influence", sum(cooks.distance(fit) > 4 / n_used))
+if (length(preds) >= 2 && all(sapply(d[-1], is.numeric))) {
+  vif <- tryCatch(diag(solve(cor(X[, -1, drop = FALSE]))), error = function(err) NULL)
+  if (!is.null(vif)) emit("vif", data.frame(term = lab[-1], vif = unname(vif), row.names = NULL))
 }
+par(mfrow = c(1, 2))
+plot(fitted(fit), e, xlab = "Fitted values", ylab = "Residuals", pch = 19, main = "Residuals vs fitted"); abline(h = 0, lty = 2)
+qqnorm(e, main = "Normal Q-Q of residuals"); qqline(e)
+""",
+    _REG_OPTIONAL,
+    ),
+    "logistic_regression": Template(
+        "Logistic regression",
+        _REG_ROLES,
+        _REG_PREP + r"""
+u <- sort(unique(d$y))
+if (length(u) != 2) stop(paste("Logistic regression needs an outcome with exactly 2 distinct values, found", length(u)))
+y01 <- as.integer(d$y == u[2]); d$y <- y01
+n1 <- sum(y01); n0 <- n_used - n1
+if (min(n1, n0) < 5) stop("Too few events or non-events (fewer than 5 of one kind)")
+w <- character(0)
+fit <- withCallingHandlers(glm(y ~ ., data = d, family = binomial()),
+  warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
+if (!fit$converged) stop("The model did not converge. Try fewer predictors, or check whether a predictor perfectly separates the outcome.")
+if (anyNA(coef(fit))) stop(collinear_msg)
+s <- summary(fit); cf <- coef(s); ci <- confint.default(fit); lab <- term_label(fit)
+p <- fitted(fit)
+auc <- (sum(rank(p)[y01 == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+lr <- fit$null.deviance - fit$deviance; dfm <- fit$df.null - fit$df.residual
+hl_p <- NA
+g <- min(10, floor(n_used / 5))
+if (g >= 4) {
+  br <- unique(quantile(p, probs = seq(0, 1, length.out = g + 1)))
+  if (length(br) >= 5) {
+    grp <- cut(p, br, include.lowest = TRUE)
+    obs <- tapply(y01, grp, sum); ex <- tapply(p, grp, sum); ng <- tapply(y01, grp, length)
+    ok <- ex > 0 & ex < ng
+    hl_p <- pchisq(sum(((obs - ex)^2 / (ex * (1 - ex / ng)))[ok]), length(obs) - 2, lower.tail = FALSE)
+  }
+}
+pred1 <- p >= 0.5
+emit("test", "Logistic regression; odds ratios are per 1-unit increase for numeric predictors and versus the reference level for categorical ones; p-value is the overall likelihood-ratio test")
+emit("event", as.character(u[2]))
+emit("reference", as.character(u[1]))
+emit("statistic_chi2", lr)
+emit("df", dfm)
+emit("p_value", pchisq(lr, dfm, lower.tail = FALSE))
+emit("mcfadden_r2", 1 - fit$deviance / fit$null.deviance)
+emit("aic", fit$aic)
+emit("auc", auc)
+emit("sensitivity_at_0.5", mean(pred1[y01 == 1]))
+emit("specificity_at_0.5", mean(!pred1[y01 == 0]))
+emit("n_used", n_used)
+emit("n_dropped_missing", n_total - n_used)
+emit("n_events", n1)
+emit("events_per_parameter", min(n1, n0) / (length(coef(fit)) - 1))
+emit("coefficients", data.frame(term = lab, odds_ratio = exp(cf[, 1]), or_lwr = exp(ci[, 1]), or_upr = exp(ci[, 2]),
+     estimate_log_odds = cf[, 1], se = cf[, 2], p_value = cf[, 4], row.names = NULL))
+emit("assumption_hosmer_lemeshow_p", hl_p)
+if (length(w)) emit("model_warnings", unique(w))
+o <- order(p, decreasing = TRUE); ys <- y01[o]
+plot(c(0, cumsum(1 - ys) / n0), c(0, cumsum(ys) / n1), type = "l", lwd = 2,
+     xlab = "1 - Specificity", ylab = "Sensitivity", main = sprintf("ROC curve (AUC = %.3f)", auc))
+abline(0, 1, lty = 2, col = "grey60")
+""",
+        _REG_OPTIONAL,
+    ),
+}
+
+
+# Appended to every template so R reports its own version; the value is moved out of `results` afterwards.
+_VERSION_PROBE = '\nemit("r_version_info", R.version.string)\n'
+
+
+def _pop_r_version(out: dict) -> str | None:
+    results = out.get("results")
+    if not isinstance(results, dict):
+        return None
+    value = results.pop("r_version_info", None)
+    if isinstance(value, list):
+        value = value[0] if value else None
+    return value if isinstance(value, str) else None
+
+
+def _script_for(spec: Template, variables: dict[str, str], digest: str, r_version: str | None) -> str:
+    """A standalone R script for the user. Display only: the server never executes this text."""
+    params = ", ".join(f"{role} = {json.dumps(col)}" for role, col in variables.items())
+    version_line = r_version or "R version not recorded"
+    header = (
+        f"# OmniStat AI: {spec.title}\n"
+        f"# {version_line}\n"
+        f"# Fingerprint (SHA-256) of the data sent to R: {digest}\n"
+        "# Save the columns you used as data.csv next to this script. No random numbers are used.\n"
+        "\n"
+        'df <- read.csv("data.csv", stringsAsFactors = FALSE)\n'
+        f"params <- list({params})\n"
+        "# Prints each result instead of returning it to the app.\n"
+        "emit <- function(name, value) {\n"
+        '  cat("\\n==", name, "==\\n")\n'
+        "  print(value)\n"
+        "}\n"
+    )
+    return header + spec.code.strip("\n") + "\n"
 
 
 def supported_tests() -> dict:
     return {
-        name: {"title": t.title, "variables": t.roles} for name, t in sorted(TEMPLATES.items())
+        name: {"title": t.title, "variables": t.roles, "optional": list(t.optional_roles)}
+        for name, t in sorted(TEMPLATES.items())
     }
 
 
@@ -355,7 +522,7 @@ async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame)
     unknown_roles = set(variables) - set(spec.roles)
     if unknown_roles:
         raise TemplateError(f"Unknown variable roles {sorted(unknown_roles)}; expected {list(spec.roles)}")
-    missing = [r for r in spec.roles if r not in variables]
+    missing = [r for r in spec.roles if r not in variables and r not in spec.optional_roles]
     if missing:
         raise TemplateError(f"Missing variable roles: {missing}")
 
@@ -369,7 +536,18 @@ async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame)
     cols = list(dict.fromkeys(variables.values()))
     csv = df[cols].to_csv(index=False).encode("utf-8")
 
-    result = await run_r(spec.code, data_csv=csv, params=variables)
+    result = await run_r(spec.code + _VERSION_PROBE, data_csv=csv, params=variables)
     out = result.to_dict()
-    out.update({"test": test, "title": spec.title, "variables": variables})
+    r_version = _pop_r_version(out)
+    digest = hashlib.sha256(csv).hexdigest()
+    out.update(
+        {
+            "test": test,
+            "title": spec.title,
+            "variables": variables,
+            "code": _script_for(spec, variables, digest, r_version),
+            "r_version": r_version,
+            "data_sha256": digest,
+        }
+    )
     return out
