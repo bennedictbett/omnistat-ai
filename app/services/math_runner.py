@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import signal
 import sys
@@ -28,6 +29,7 @@ MAX_STDOUT = 200_000
 ENGINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "math_engine.py")
 
 _sem: asyncio.Semaphore | None = None
+logger = logging.getLogger("omnistat.math_runner")
 
 
 class MathBusy(Exception):
@@ -53,7 +55,8 @@ def _limits() -> None:
     os.setsid()  # own process group, so the whole tree can be killed
     if resource is not None:
         resource.setrlimit(resource.RLIMIT_CPU, (CPU_SECONDS, CPU_SECONDS))
-        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
+        if sys.platform != "darwin":
+            resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
         resource.setrlimit(resource.RLIMIT_FSIZE, (1024**2, 1024**2))
 
 
@@ -72,6 +75,12 @@ async def run_math(request: dict) -> dict:
         raise MathBusy("The maths engine is busy, try again in a few seconds") from None
     proc = None
     try:
+        if sys.platform == "darwin":
+            logger.warning(
+                "macOS does not support the worker address-space limit; "
+                "CPU, file-size and wall-clock limits remain enabled. "
+                "Use a Linux container for memory-limited execution."
+            )
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-I", ENGINE_PATH,
             stdin=asyncio.subprocess.PIPE,

@@ -16,9 +16,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import shutil
 import signal
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -41,6 +43,7 @@ MAX_OUTPUT_CHARS = 20_000
 MAX_PLOT_BYTES = 5 * 1024**2
 
 _sem: asyncio.Semaphore | None = None
+logger = logging.getLogger("omnistat.r_runner")
 
 
 def _semaphore() -> asyncio.Semaphore:
@@ -93,7 +96,8 @@ class RResult:
 def _apply_limits() -> None:
     """Runs in the child just before exec."""
     resource.setrlimit(resource.RLIMIT_CPU, (CPU_SECONDS, CPU_SECONDS))
-    resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
+    if sys.platform != "darwin":
+        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_FILE_BYTES, MAX_FILE_BYTES))
     # RLIMIT_NPROC is per-user, so set process limits at the container level.
 
@@ -158,8 +162,16 @@ async def _run_r_unlocked(
         if R_LIBS:
             env["R_LIBS"] = R_LIBS
 
+        if sys.platform == "darwin":
+            logger.warning(
+                "macOS does not support the worker address-space limit; "
+                "CPU, file-size and wall-clock limits remain enabled. "
+                "Use a Linux container for memory-limited execution."
+            )
+        # Resolve against the parent's PATH before giving R a restricted environment.
+        executable = shutil.which(RSCRIPT) or RSCRIPT
         proc = await asyncio.create_subprocess_exec(
-            RSCRIPT, "--vanilla", "wrapper.R",
+            executable, "--vanilla", "wrapper.R",
             cwd=workdir,
             env=env,
             stdout=asyncio.subprocess.PIPE,
