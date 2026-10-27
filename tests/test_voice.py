@@ -109,7 +109,7 @@ def sent_fields(req: httpx.Request) -> dict[str, bytes]:
 def test_sniff_recognises_real_containers(webm, wav):
     assert tr.sniff_format(webm) == "webm"
     assert tr.sniff_format(wav) == "wav"
-    assert tr.sniff_format(_make(["-c:a", "libvorbis", "-f", "ogg"])) == "ogg"
+    assert tr.sniff_format(_make(["-c:a", "libopus", "-b:a", "32k", "-f", "ogg"])) == "ogg"
     assert tr.sniff_format(_make(["-c:a", "libmp3lame", "-f", "mp3"])) == "mp3"
     assert tr.sniff_format(_make(["-c:a", "flac", "-f", "flac"])) == "flac"
 
