@@ -512,7 +512,7 @@ def supported_tests() -> dict:
     }
 
 
-async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame) -> dict:
+def prepare_test_data(test: str, variables: dict[str, str], df: pd.DataFrame) -> bytes:
     spec = TEMPLATES.get(test)
     if spec is None:
         raise TemplateError(
@@ -534,7 +534,12 @@ async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame)
 
     # Send R only the columns it needs.
     cols = list(dict.fromkeys(variables.values()))
-    csv = df[cols].to_csv(index=False).encode("utf-8")
+    return df[cols].to_csv(index=False).encode("utf-8")
+
+
+async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame) -> dict:
+    csv = prepare_test_data(test, variables, df)
+    spec = TEMPLATES[test]
 
     result = await run_r(spec.code + _VERSION_PROBE, data_csv=csv, params=variables)
     out = result.to_dict()
