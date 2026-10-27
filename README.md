@@ -142,6 +142,39 @@ excluding non-finite/non-numeric values in the selected column. The separate
 Normality and Survival tabs remain manual-entry tools; they do not automatically
 select uploaded columns.
 
+### Analysis Plan Review (First Milestone)
+
+The independent-groups t-test now has an explicit review step in both Jarvis and
+the Test Wizard's shared column picker:
+
+1. Choose the outcome and grouping columns, then select **Review Analysis Plan**.
+2. The backend prepares a version `1.0` specification without executing R.
+3. Review the Welch procedure, R engine, column mappings, full selected-data
+   SHA-256, total/complete/excluded row counts, group sizes, fixed two-sided
+   alternative, 95% confidence level, assumptions and expected outputs.
+4. Select **Confirm and Run in R**, or cancel. Changing columns invalidates the
+   review. Independence is a study-design requirement, not an automatic check.
+5. The backend regenerates and compares the plan before execution. Changed data
+   or plan fields are rejected (409 for a mismatch, 422 for invalid input).
+   Results include the exact executed specification under **Executed analysis
+   specification**, alongside the existing R script and data fingerprint.
+
+`POST /api/r/plan` uses the same API-key and rate-limit controls as `/api/r/run`.
+The browser uses the server-side `/api/r/plan` proxy; no API key is exposed.
+`/api/r/run` accepts an optional `analysis_plan` containing the reviewed JSON.
+The SHA-256 covers selected columns in canonical role order, including rows later
+excluded for missing values; it is not a fingerprint of unrelated dataset columns.
+
+This milestone supports only `independent_t_test` plans. Other analyses retain
+their existing run flow. Existing API clients may still run without a plan for
+backwards compatibility; this is a UI review and consistency check, not a stored
+approval record or audit log. R version remains part of the execution result,
+not the pre-execution plan. Parameters are fixed to the existing curated template;
+the review does not yet support editing alpha, confidence level or alternatives.
+Use numeric group codes or non-numeric text labels. Numeric-looking text codes
+and the literal text label `NA` must be recoded before review to avoid R CSV
+type inference changing group membership.
+
 ### Development Checks (macOS/Linux)
 
 Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored
