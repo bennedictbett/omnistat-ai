@@ -5,6 +5,7 @@ import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
 import {
   asCurveFit,
+  AnalysisPlan,
   RApiError,
   RRunResult,
   RTestSpec,
@@ -14,6 +15,7 @@ import {
   isPKey,
   loadUploadedData,
   prettyKey,
+  prepareRPlan,
   runRTest,
 } from '@/lib/rApi'
 
@@ -36,10 +38,12 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RRunResult | null>(null)
+  const [plan, setPlan] = useState<AnalysisPlan | null>(null)
 
   useEffect(() => {
     setExtraRoles([])
     setResult(null)
+    setPlan(null)
     setError(null)
     try {
       const d = loadUploadedData()
@@ -77,8 +81,14 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     setResult(null)
     try {
       const variables = Object.fromEntries(activeRoles.filter((r) => mapping[r]).map((r) => [r, mapping[r]]))
-      setResult(await runRTest(test, variables, data.rows))
+      if (test === 'independent_t_test' && !plan) {
+        setPlan(await prepareRPlan(test, variables, data.rows))
+      } else {
+        setResult(await runRTest(test, variables, data.rows, plan ?? undefined))
+        setPlan(null)
+      }
     } catch (e) {
+      setPlan(null)
       setError(e instanceof RApiError ? e.message : 'Something went wrong running the analysis.')
     } finally {
       setRunning(false)
@@ -130,8 +140,14 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
               )}
             </span>
             <select
+              disabled={running}
               value={mapping[role] ?? ''}
-              onChange={(e) => setMapping((m) => ({ ...m, [role]: e.target.value }))}
+              onChange={(e) => {
+                setMapping((m) => ({ ...m, [role]: e.target.value }))
+                setPlan(null)
+                setResult(null)
+                setError(null)
+              }}
               className="mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500/50"
             >
               <option value="">Select a column…</option>
@@ -166,9 +182,24 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
         className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-all"
       >
         {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-        {running ? 'Running…' : 'Run in R'}
+        {running ? 'Working…' : test === 'independent_t_test' ? (plan ? 'Confirm and Run in R' : 'Review Analysis Plan') : 'Run in R'}
       </button>
 
+      {plan && (
+        <section aria-label="Analysis plan review" className="rounded-lg border border-blue-500/30 p-4 space-y-3 text-sm text-gray-300">
+          <h3 className="font-medium text-white">Review before execution</h3>
+          <p>{plan.title} · Engine: {plan.engine.toUpperCase()} · Specification {plan.schema_version}</p>
+          <p>Outcome: {plan.variables.outcome} · Group: {plan.variables.group}</p>
+          <p>{plan.rows_used} of {plan.rows_total} rows used; {plan.rows_dropped_missing} dropped for missing outcome or group.</p>
+          <p>Groups: {Object.entries(plan.group_counts).map(([group, count]) => `${group}: ${count}`).join(', ')}</p>
+          <p>Two-sided test · 95% confidence interval · Unequal variances (Welch)</p>
+          <p className="break-all font-mono text-xs">Data SHA-256: {plan.data_sha256}</p>
+          <ul className="list-disc pl-5">{plan.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
+          <p>Outputs: {plan.outputs.join(', ')}</p>
+          <p>No analysis has run yet. Confirm that these columns and study-design assumptions are appropriate.</p>
+          <button disabled={running} onClick={() => setPlan(null)} className="text-blue-400">Cancel review</button>
+        </section>
+      )}
       {running && (
         <p className="text-xs text-gray-500">
           The first run after a quiet period can take up to a minute while the server wakes up.
@@ -183,6 +214,12 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       )}
 
       {result && <ResultView result={result} />}
+      {result?.analysis_plan && (
+        <details className="text-xs text-gray-400">
+          <summary>Executed analysis specification</summary>
+          <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(result.analysis_plan, null, 2)}</pre>
+        </details>
+      )}
     </div>
   )
 }
