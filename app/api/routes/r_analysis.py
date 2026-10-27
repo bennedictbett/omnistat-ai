@@ -1,11 +1,13 @@
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.security.rate_limit import rate_limit_r
 from app.services.r_runner import RunnerBusy
 from app.services.r_templates import TemplateError, run_named_test, supported_tests
 from app.services.analysis_plan import AnalysisPlan, prepare_analysis_plan
+from app.services.reproducibility_bundle import BundleError, BundleResult, build_bundle
 
 router = APIRouter()
 
@@ -15,6 +17,24 @@ class RAnalysisRequest(BaseModel):
     variables: dict[str, str] = Field(..., description="role -> column name, per /r/tests")
     data: list[dict] = Field(..., description="Rows, e.g. the upload endpoint's full_data")
     analysis_plan: AnalysisPlan | None = None
+
+
+class BundleRequest(BaseModel):
+    result: BundleResult
+    data: list[dict]
+
+
+@router.post("/bundle", dependencies=[Depends(rate_limit_r)])
+def export_r_bundle(req: BundleRequest):
+    try:
+        archive = build_bundle(req.result, req.data)
+    except (BundleError, TemplateError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return Response(
+        archive, media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="omnistat-reproducibility.zip"',
+                 "Cache-Control": "no-store"},
+    )
 
 
 @router.post("/plan", dependencies=[Depends(rate_limit_r)])
