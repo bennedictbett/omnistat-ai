@@ -7,6 +7,7 @@ import Header from '@/components/core/Header'
 import { UploadResult } from '@/lib/api'
 import { DatasetProject } from '@/lib/projects'
 import { loadUploadedData } from '@/lib/rApi'
+import { AuditFailureBanner } from '@/components/audit/AuditLog'
 
 const SOURCE_KEY = 'omnistat_data_source'
 
@@ -70,6 +71,7 @@ export default function Home() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
+          <AuditFailureBanner />
           {storageError && <p role="alert" className="mb-4 text-sm text-red-400">{storageError}</p>}
           {activeTab === 'jarvis' && <JarvisInput />}
           {activeTab === 'upload' && <FileUpload onUpload={handleUpload} />}
