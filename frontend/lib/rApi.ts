@@ -423,7 +423,7 @@ function detailText(body: unknown): string | null {
   return null
 }
 
-function isRRunResult(body: unknown): body is RRunResult {
+export function isRRunResult(body: unknown): body is RRunResult {
   return isRecord(body) && typeof body.ok === 'boolean' && isRecord(body.results) &&
     Array.isArray(body.plots) && body.plots.every((plot) => typeof plot === 'string') &&
     (body.error === null || typeof body.error === 'string') &&
