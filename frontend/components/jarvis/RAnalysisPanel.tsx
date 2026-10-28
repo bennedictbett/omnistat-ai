@@ -178,6 +178,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
               {data.columns.map((c) => (
                 <option key={c} value={c}>
                   {c}
+                  {data.variableLabels[c] ? ` — ${data.variableLabels[c]}` : ''}
                   {data.numericCols.includes(c) ? '  (numeric)' : ''}
                 </option>
               ))}
@@ -215,7 +216,10 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
           <p>{plan.title} · Engine: {plan.engine.toUpperCase()} · Specification {plan.schema_version}</p>
           <p>{Object.entries(plan.variables).map(([role, column]) => `${role}: ${column}`).join(' · ')}</p>
           <p>{plan.rows_used} of {plan.rows_total} rows used; {plan.rows_dropped_missing} dropped for missing selected values.</p>
-          {Object.keys(plan.group_counts).length > 0 && <p>Groups: {Object.entries(plan.group_counts).map(([group, count]) => `${group}: ${count}`).join(', ')}</p>}
+          {Object.keys(plan.group_counts).length > 0 && <p>Groups: {Object.entries(plan.group_counts).map(([group, count]) => {
+            const label = data.valueLabels[plan.variables.group ?? '']?.[group]
+            return `${group}${label ? ` (${label})` : ''}: ${count}`
+          }).join(', ')}</p>}
           {plan.alternative && <p>Two-sided test</p>}
           {plan.confidence_level && <p>95% confidence intervals</p>}
           {plan.equal_variances !== null && <p>{plan.equal_variances ? 'Equal variances assumed' : 'Unequal variances (Welch)'}</p>}
