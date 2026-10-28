@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
+import AssumptionChecks from '@/components/jarvis/AssumptionChecks'
 import AnalysisReport from '@/components/reports/AnalysisReport'
 import ReproducibilityBundle from '@/components/reports/ReproducibilityBundle'
 import {
   asCurveFit,
   AnalysisPlan,
+  AssumptionReport,
+  fetchAssumptionChecks,
   RApiError,
   REVIEWED_PROCEDURES,
   RRunResult,
@@ -41,7 +44,14 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RRunResult | null>(null)
-  const [plan, setPlan] = useState<AnalysisPlan | null>(null)
+  const [plan, setPlanState] = useState<AnalysisPlan | null>(null)
+  const [checks, setChecks] = useState<AssumptionReport | null>(null)
+  const [checksError, setChecksError] = useState<string | null>(null)
+  const setPlan = (next: AnalysisPlan | null) => {
+    setPlanState(next)
+    setChecks(null)
+    setChecksError(null)
+  }
   const needsReview = REVIEWED_PROCEDURES.some((procedure) => procedure === test)
 
   useEffect(() => {
@@ -86,7 +96,17 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     try {
       const variables = Object.fromEntries(activeRoles.filter((r) => mapping[r]).map((r) => [r, mapping[r]]))
       if (needsReview && !plan) {
-        setPlan(await prepareRPlan(test, variables, data.rows))
+        const reviewed = await prepareRPlan(test, variables, data.rows)
+        let report: AssumptionReport | null = null
+        let reportError: string | null = null
+        try {
+          report = await fetchAssumptionChecks(reviewed, data.rows)
+        } catch (e) {
+          reportError = e instanceof RApiError ? e.message : 'The checks could not be completed.'
+        }
+        setPlan(reviewed)
+        setChecks(report)
+        setChecksError(reportError)
       } else {
         setResult(await runRTest(test, variables, data.rows, plan ?? undefined))
         setPlan(null)
@@ -202,6 +222,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
           <p className="break-all font-mono text-xs">Data SHA-256: {plan.data_sha256}</p>
           <ul className="list-disc pl-5">{plan.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
           <p>Outputs: {plan.outputs.join(', ')}</p>
+          <AssumptionChecks report={checks} error={checksError} />
           <p>No analysis has run yet. Confirm that these columns and study-design assumptions are appropriate.</p>
           <button disabled={running} onClick={() => setPlan(null)} className="text-blue-400">Cancel review</button>
         </section>
