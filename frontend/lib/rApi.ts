@@ -164,6 +164,8 @@ export interface UploadedData {
   columns: string[]
   numericCols: string[]
   rows: Record<string, unknown>[]
+  variableLabels: Record<string, string>
+  valueLabels: Record<string, Record<string, string>>
 }
 
 /** An error whose message is safe to show to the user. */
@@ -237,7 +239,9 @@ export function loadUploadedData(): UploadedData | null {
     if (
       !Array.isArray(parsed?.columns) || !parsed.columns.every((c: unknown) => typeof c === 'string') ||
       !Array.isArray(parsed?.full_data) || !parsed.full_data.every(isRecord) ||
-      !Array.isArray(parsed?.numeric_cols) || !parsed.numeric_cols.every((c: unknown) => typeof c === 'string')
+      !Array.isArray(parsed?.numeric_cols) || !parsed.numeric_cols.every((c: unknown) => typeof c === 'string') ||
+      (parsed.variable_labels !== undefined && !isStringRecord(parsed.variable_labels)) ||
+      (parsed.value_labels !== undefined && !(isRecord(parsed.value_labels) && Object.values(parsed.value_labels).every(isStringRecord)))
     ) {
       throw new RApiError(0, 'Saved dataset is invalid. Upload your CSV or Excel file again.')
     }
@@ -245,6 +249,8 @@ export function loadUploadedData(): UploadedData | null {
       columns: parsed.columns as string[],
       numericCols: Array.isArray(parsed.numeric_cols) ? (parsed.numeric_cols as string[]) : [],
       rows: parsed.full_data as Record<string, unknown>[],
+      variableLabels: parsed.variable_labels ?? {},
+      valueLabels: parsed.value_labels ?? {},
     }
   } catch (e) {
     if (e instanceof RApiError) throw e
@@ -355,6 +361,9 @@ export interface CurveFit {
   excludedZero: number
 }
 
+function isStringRecord(v: unknown): v is Record<string, string> {
+  return isRecord(v) && Object.values(v).every((x) => typeof x === 'string')
+}
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }

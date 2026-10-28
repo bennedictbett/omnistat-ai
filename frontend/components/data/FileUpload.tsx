@@ -42,7 +42,7 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-white">Upload Clinical Data</h2>
-        <p className="text-sm text-gray-400">Supports CSV and Excel files</p>
+        <p className="text-sm text-gray-400">Supports CSV, Excel, SPSS (.sav, .zsav) and Stata (.dta) files</p>
       </div>
 
       <div
@@ -59,7 +59,7 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx,.xls,.sav,.zsav,.dta"
           className="hidden"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
@@ -76,7 +76,7 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
               <p className="text-white font-medium">Drop your file here</p>
               <p className="text-sm text-gray-500 mt-1">or click to browse</p>
             </div>
-            <p className="text-xs text-gray-600">CSV, XLSX supported</p>
+            <p className="text-xs text-gray-600">CSV, XLSX, SAV, ZSAV and DTA supported</p>
           </div>
         )}
       </div>
@@ -117,11 +117,17 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
             <div className="flex flex-wrap gap-2">
               {result.columns.map((col: string) => (
                 <span key={col} className="px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-blue-400">
-                  {col}
+                  {col}{result.variable_labels?.[col] ? ` — ${result.variable_labels[col]}` : ''}
                 </span>
               ))}
             </div>
           </div>
+          {result.value_labels && Object.keys(result.value_labels).length > 0 && (
+            <p className="text-xs text-gray-500">
+              Value labels were found for {Object.keys(result.value_labels).length} column(s). Analyses use the stored
+              codes; labels are shown alongside them. User-defined missing codes were treated as missing.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -6,3 +6,4 @@ pip install --only-binary=:all: scipy==1.13.0
 pip install httpx==0.24.1
 pip install groq==0.9.0
 pip install fastapi==0.111.0 uvicorn==0.29.0 python-multipart==0.0.9 openpyxl==3.1.2 lifelines==0.27.8 python-dotenv==1.0.1 pydantic==2.7.1
+pip install --only-binary=:all: pyreadstat==1.2.8

@@ -28,7 +28,7 @@ Type your research question in plain English. Jarvis identifies the correct stat
 ```
 
 ### Visual Data Dashboard
-Upload any CSV or Excel file — OmniStat instantly generates:
+Upload any CSV, Excel, SPSS or Stata file — OmniStat instantly generates:
 - **Overview** — row/column counts, numeric summary table (mean, median, std, min, max)
 - **Distributions** — histograms for every numeric column
 - **Categorical** — donut pie charts + bar charts for every categorical column
@@ -63,7 +63,7 @@ FastAPI Backend (Python)
 - **Backend:** FastAPI + Python (scipy, lifelines, pandas, numpy)
 - **AI Agent:** Groq (`groq/compound` model) for natural language → statistical intent
 - **Frontend:** Next.js 14 + Tailwind CSS + Recharts
-- **Data:** Full CSV/Excel parsing with automatic column type detection
+- **Data:** CSV, Excel, SPSS (`.sav`/`.zsav`) and Stata (`.dta`) parsing with automatic column type detection and variable/value labels
 
 ---
 
@@ -142,13 +142,36 @@ excluding non-finite/non-numeric values in the selected column. The separate
 Normality and Survival tabs remain manual-entry tools; they do not automatically
 select uploaded columns.
 
+### SPSS and Stata Import
+
+Upload SPSS (`.sav`, compressed `.zsav`) or Stata (`.dta`) files like CSV or
+Excel files. Files are read with `pyreadstat`; the upload is written to a private
+temporary folder that is deleted immediately after parsing.
+
+- **Stored codes are kept.** Analyses use the values stored in the file (for
+  example `1` and `2`), so results and the R script match the data exactly.
+- **Labels are returned alongside.** `variable_labels` maps columns to their
+  descriptions and `value_labels` maps each stored value to its label, for
+  example `{"sex": {"1": "Male", "2": "Female"}}`. Keys match how the value is
+  displayed (`1.0` becomes `"1"`). Labels appear in the upload summary and column
+  pickers, and beside group codes in analysis plan reviews. CSV and Excel uploads
+  return empty label objects.
+- **Missing codes become missing.** SPSS user-defined missing values (for
+  example `99 = Refused`) and Stata extended missing values (`.a`–`.z`) are
+  treated as missing, as SPSS and Stata do in analyses. The audit counts them as
+  missing.
+- **Dates become ISO text** (for example `2026-01-01`), matching CSV uploads.
+
+Corrupt or unsupported files return HTTP 422. Results tables and charts still
+show stored codes rather than value labels.
+
 ### Upload Data-Quality Audit
 
 The upload API returns an additive `audit` object (version `1.0`), displayed above
 the Data Dashboard tabs. It reports:
 
 - Missing count and percentage per column, using pandas CSV/Excel missing-value
-  parsing. Whitespace-only strings are counted separately as blank text.
+  parsing, or SPSS/Stata missing codes. Whitespace-only strings are counted separately as blank text.
 - Exact duplicate rows beyond the first occurrence across all parsed columns.
   These are not necessarily duplicate patients and are never removed automatically.
 - Entirely empty columns (missing or blank text) and columns constant among
@@ -174,7 +197,7 @@ clean. No raw values are logged by these checks.
 
 Use **Projects** in the sidebar to keep several uploaded datasets on this device:
 
-1. Upload a CSV or Excel file, then open **Projects**.
+1. Upload a CSV, Excel, SPSS or Stata file, then open **Projects**.
 2. Enter a project name (1–100 characters) and select **Save project**.
 3. Select **Open** on a saved project to make it the active dataset for the
    summary, Jarvis, Test Wizard and other analyses. Opening a project does not
@@ -420,7 +443,7 @@ or ruleset for `master`; the workflow alone does not enforce merge protection.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/analytics/upload` | Upload CSV/Excel — returns full stats + visualization data |
+| POST | `/api/analytics/upload` | Upload CSV/Excel/SPSS/Stata — returns full stats, labels + visualization data |
 | POST | `/api/analytics/normality` | Shapiro-Wilk normality test |
 | POST | `/api/analytics/survival` | Kaplan-Meier survival curve |
 | POST | `/api/analytics/descriptive` | Full descriptive statistics |
