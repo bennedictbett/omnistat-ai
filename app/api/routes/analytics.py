@@ -35,12 +35,12 @@ async def query(body: dict):
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Upload clinical Excel/CSV file for analysis."""
+    """Upload a CSV, Excel, SPSS or Stata file for analysis."""
     try:
         return await service.parse_file(file)
     except (ValueError, pd.errors.ParserError) as e:
         logger.warning("Dataset upload rejected: %s", type(e).__name__)
-        raise HTTPException(status_code=422, detail="Could not parse a non-empty dataset. Check the CSV or Excel file.") from e
+        raise HTTPException(status_code=422, detail="Could not parse a non-empty dataset. Check the CSV, Excel, SPSS (.sav/.zsav) or Stata (.dta) file.") from e
 
 
 @router.post("/normality")
