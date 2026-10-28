@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   logout: vi.fn(),
 }))
+vi.mock('@/components/audit/AuditLog', () => ({ default: () => null, AuditFailureBanner: () => null }))
 vi.mock('@/components/accounts/AccountProvider', () => ({ useAccount: () => mocks.account }))
 vi.mock('@/lib/supabase', () => ({
   supabaseConfigError: () => null,
