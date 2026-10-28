@@ -27,7 +27,14 @@ export interface UploadResult {
   numeric_cols: string[]
   full_data: Record<string, unknown>[]
   missing: Record<string, number>
+  /** SPSS/Stata variable labels: column -> label */
+  variable_labels?: Record<string, string>
+  /** SPSS/Stata value labels: column -> stored value (as displayed) -> label */
+  value_labels?: Record<string, Record<string, string>>
 }
+
+const isStringRecord = (v: unknown): v is Record<string, string> =>
+  isRecord(v) && Object.values(v).every((x) => typeof x === 'string')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -38,7 +45,7 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
   form.append('file', file)
   const data = await requestJson<unknown>('/api/analytics/upload', { method: 'POST', body: form })
   if (!isUploadResult(data)) {
-    throw new ApiError('The server did not return a complete dataset. Upload a non-empty CSV or Excel file again.')
+    throw new ApiError('The server did not return a complete dataset. Upload a non-empty CSV, Excel, SPSS or Stata file again.')
   }
   return data
 }
@@ -51,6 +58,8 @@ export function isUploadResult(data: unknown): data is UploadResult {
     Array.isArray(data.numeric_cols) && data.numeric_cols.every((c) => typeof c === 'string') &&
     Array.isArray(data.full_data) && data.full_data.length === data.rows && data.full_data.every(isRecord) &&
     isRecord(data.missing) && Object.values(data.missing).every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0) &&
+    (data.variable_labels === undefined || isStringRecord(data.variable_labels)) &&
+    (data.value_labels === undefined || (isRecord(data.value_labels) && Object.values(data.value_labels).every(isStringRecord))) &&
     (data.audit === undefined || (isDataAudit(data.audit) && data.audit.rows === data.rows &&
       data.audit.columns.length === columns.length &&
       data.audit.columns.every((column, index) => column.column === columns[index])))
