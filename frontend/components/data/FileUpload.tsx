@@ -5,7 +5,7 @@ import { Upload, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
 import { ApiError, UploadResult, uploadDataset } from '@/lib/api'
 
 interface FileUploadProps {
-  onUpload: (data: UploadResult) => void
+  onUpload: (data: UploadResult, fileName: string) => void
 }
 
 export default function FileUpload({ onUpload }: FileUploadProps) {
@@ -22,7 +22,7 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
 
     try {
       const data = await uploadDataset(file)
-      onUpload(data)
+      onUpload(data, file.name)
       setResult(data)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save the uploaded data in this browser. Check available storage and try again.')
