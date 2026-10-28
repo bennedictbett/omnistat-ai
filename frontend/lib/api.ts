@@ -43,7 +43,7 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
   return data
 }
 
-function isUploadResult(data: unknown): data is UploadResult {
+export function isUploadResult(data: unknown): data is UploadResult {
   if (!isRecord(data)) return false
   const columns = data.columns
   return typeof data.rows === 'number' && Number.isInteger(data.rows) && data.rows > 0 &&
