@@ -194,6 +194,29 @@ or cannot make a large project the active dataset, an explicit error is shown an
 the previous active dataset remains in use. Projects store datasets only; analysis
 results are not saved with them.
 
+### Printable Analysis Report
+
+After a successful R analysis, select **Print / Save as PDF** below the result.
+Your browser's print dialog opens with a report containing:
+
+- methods: procedure, R version, selected columns, data SHA-256 and, for
+  reviewed plans, row counts, missing-data handling, settings, group sizes and
+  declared assumptions (not all are checked automatically);
+- results: p-value with the 0.05 decision, statistics, tables and warnings;
+- charts produced by R; and
+- an appendix with the standalone R script.
+
+Choose **Save as PDF** in the print dialog to keep a copy. The report is created
+in the browser from the displayed result, so nothing is uploaded, rerun or saved
+automatically. It contains no raw data rows, but tables, group labels and charts
+can still reveal sensitive information.
+
+Tables longer than 200 rows are shortened with a note. Curve-fit coordinates,
+data points and residuals are left out; use the reproducibility ZIP for
+complete outputs. The report is printed from an isolated, script-free frame,
+and all values are escaped. It is auto-generated, should be reviewed by a
+qualified statistician, and is not a signed attestation.
+
 ### Reproducibility ZIP Export
 
 After a successful R analysis, the shared analysis panel offers **Download ZIP**.
