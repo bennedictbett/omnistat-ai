@@ -496,6 +496,43 @@ SQL ownership checks and the two-account live test above. Missing Supabase
 configuration leaves history disabled with an explicit message, without breaking
 the workstation.
 
+### Audit Log (Supabase)
+
+While a user is signed in, OmniStat records an append-only audit entry for each
+data upload, R analysis run (successful or failed), save to history and export
+(PDF print, Word or reproducibility ZIP). Signed-out use is not recorded. Entries
+follow the specification's minimum fields: event ID, UTC time, user, action,
+procedure, engine and R version, SHA-256 of the reviewed plan, data and R code,
+warnings and details such as column names, row counts, export format or the
+uploaded file name. **No data rows, results or code are stored**, only
+fingerprints.
+
+Setup: in the Supabase SQL Editor, run
+[the audit migration](supabase/migrations/202610280001_audit_log.sql), then
+[the integrity checks](supabase/tests/audit_log_integrity.sql). The checks use
+temporary users inside a transaction and roll back.
+
+Integrity is enforced by the database, not the browser:
+
+- A trigger assigns the owner, time, per-user sequence number, previous hash and
+  entry hash. Client-supplied values for these are ignored, and recording for
+  another user is rejected. A per-user lock keeps the sequence gap-free across
+  tabs.
+- Each hash is SHA-256 over a canonical encoding of the entry plus the previous
+  entry's hash, so entries form a chain.
+- Users can only read and add their own entries. Updates, deletes and truncation
+  are refused by both permissions and triggers. Entries are retained if an
+  account is deleted.
+- **Verify integrity** (History → Audit log) recomputes the whole chain in the
+  database and reports the first changed, missing or reordered entry.
+  **Export JSON** downloads every entry with the verification result.
+
+Limitations: removing only the newest entries cannot be detected from the chain
+alone; compare entry counts with earlier exports. A database administrator could
+disable the triggers and rewrite the entire chain, so exported copies held
+elsewhere are the independent evidence. Recording never blocks or fails your
+work; if an entry cannot be recorded, a warning banner says so.
+
 ### Development Checks (macOS/Linux)
 
 Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored
