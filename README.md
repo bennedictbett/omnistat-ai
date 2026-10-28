@@ -243,6 +243,33 @@ Tests explain real R outputs for all nine procedures (stored in
 number matches its source field. Other procedures show the results without a
 summary. The printable report includes the same summary.
 
+### Word Report With APA Formatting
+
+After a successful R analysis, select **Download Word (.docx)** in the Report
+panel. The editable document is created in the browser with the open-source
+`docx` library (MIT), loaded only when needed; nothing is uploaded or saved.
+It contains:
+
+- an APA 7-style results statement, for example
+  *t*(27.81) = −0.89, *p* = .382, *M*<sub>diff</sub> = −3.95, 95% CI [−13.08, 5.17], *d* = −0.32;
+- the plain-English summary and caveats;
+- numbered APA tables (horizontal rules only): group or paired descriptive
+  statistics, Tukey HSD or Holm-adjusted pairwise comparisons, and observed
+  counts for chi-square, with value labels beside group codes;
+- the method (procedure, R version, columns, data SHA-256, rows used and
+  excluded, declared assumptions);
+- numbered figures from the R charts; and
+- an appendix with the R script.
+
+APA formatting uses italic statistic symbols, true minus signs, two decimals for
+statistics, exact *p* values to three decimals (`< .001` below that) and no
+leading zero for values that cannot exceed 1 (*p*, *r*, η², ε², *V*). Numbers are
+rounded copies of the result fields; tests check the statements against real R
+output for all nine procedures with plain-English summaries. Other procedures
+get a simple results table instead of an APA statement. Invalid chart images are
+replaced with a note rather than embedded. As with the printable report, the
+document is a snapshot to review with a statistician, not a signed attestation.
+
 ### Printable Analysis Report
 
 After a successful R analysis, select **Print / Save as PDF** below the result.
