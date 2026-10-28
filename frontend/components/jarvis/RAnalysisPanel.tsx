@@ -8,6 +8,7 @@ import ResultExplanation from '@/components/jarvis/ResultExplanation'
 import { explainResult } from '@/lib/explainResult'
 import AnalysisReport from '@/components/reports/AnalysisReport'
 import ReproducibilityBundle from '@/components/reports/ReproducibilityBundle'
+import SaveAnalysis from '@/components/history/SaveAnalysis'
 import {
   asCurveFit,
   AnalysisPlan,
@@ -250,6 +251,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       {result && <ResultView result={result} />}
       {result && <AnalysisReport result={result} valueLabels={data.valueLabels} />}
       {result && <ReproducibilityBundle key={JSON.stringify(result.variables)} result={result} rows={data.rows} />}
+      {result && <SaveAnalysis result={result} />}
       {result?.analysis_plan && (
         <details className="text-xs text-gray-400">
           <summary>Executed analysis specification</summary>
@@ -273,7 +275,7 @@ function formatScalar(key: string, v: unknown): string {
   return String(v)
 }
 
-function ResultView({ result }: { result: RRunResult }) {
+export function ResultView({ result }: { result: RRunResult }) {
   if (!result.ok) {
     return (
       <div className="flex items-start gap-3 p-4 bg-red-500/5 border border-red-500/20 rounded-lg">

@@ -425,6 +425,77 @@ plan's canonical columns and data SHA-256. The browser rejects reports that do
 not match the reviewed plan. If checks are unavailable, the review says so
 explicitly and the analysis can still be run.
 
+### Supabase Accounts and Cloud History
+
+Accounts are optional: analysis execution still works without sign-in. Account
+ownership applies to saved history, not to the existing shared R/math/voice API
+key. Sign-in uses email codes (Supabase manages account creation and verification;
+this app never handles passwords).
+
+Configure a development Supabase project before enabling this feature:
+
+1. In the Supabase SQL Editor, run
+   [the history migration](supabase/migrations/202610270001_analysis_history.sql).
+   It creates append-only result snapshots (with owner deletion), an index and
+   row-level security policies. Do not disable RLS or grant anonymous access.
+2. Run [the ownership checks](supabase/tests/history_ownership.sql) in the SQL
+   Editor. They create two temporary users inside a transaction, verify owner
+   reads/deletes, reject forged ownership, check cross-user isolation and
+   anonymous/update privileges, then roll back. Use a development project; if an
+   assertion fails, run `rollback;` and fix the configuration before proceeding.
+3. Enable Email authentication and account sign-ups in Supabase Auth. Users can
+   sign in with either the emailed link or a code:
+   - **Links** work with Supabase's default templates. Open the link in the same
+     browser. Under **Authentication → URL Configuration**, set the Site URL and
+     add every app address to **Redirect URLs**, for example
+     `http://localhost:3000/**` and your Vercel URL. Expired or invalid links
+     show an explicit message.
+   - **Codes** need custom templates, which Supabase only allows after you set up
+     custom SMTP. Add the code to **both** the **Confirm signup** template (new
+     users) and the **Magic Link** template (returning users), for example
+     `<p>Your sign-in code is {{ .Token }}</p>`.
+   Configure a production SMTP provider and review auth rate limits before launch.
+4. Add these public values to `frontend/.env.local` and the Vercel environment:
+
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+   ```
+
+   Use the project URL only (Project Settings → Data API / API Keys), not the REST
+   endpoint ending in `/rest/v1/`; a URL with a path shows an explicit
+   misconfiguration message. Use the project's publishable key (or legacy anon
+   key), **never a secret or service-role key**. Restart local Next.js/rebuild Vercel after setting them.
+   Neither variable is needed on Render. Environment files are ignored by Git.
+5. Open **History**, request an email code, then verify it. Run an R analysis from
+   Jarvis or the Test Wizard and explicitly consent before selecting **Save to
+   History**. Reopen or delete that snapshot from History or `/history`.
+6. Verify with two real accounts: A can save/reopen/delete its records, B cannot
+   see A's records, refreshing preserves A's history, and sign-out hides history.
+   Test network failures and expired sessions before using real research data.
+
+Saving is opt-in, not automatic. The saved R response includes results, plots,
+column labels, reproducible code, data fingerprint and the executed specification
+when present. No raw dataset is separately attached, **but charts, stdout and
+statistics can themselves contain patient-level data or identifiers**. Cloud
+storage is not automatically suitable for clinical data: confirm consent,
+institutional approval, region, retention, access and provider agreements first.
+Client saves have a 4 MB limit; the database also caps serialized JSON at 5 MB.
+
+History lists 20 records per page, loads full results only on opening, and requires
+confirmation for deletion. Stored snapshots are not an immutable audit log or
+proof that a result originated on the analysis server: signed-in users can submit
+their own snapshots. Uploads remain in browser localStorage, outside the account;
+signing out does not clear them. Use separate/private browser profiles on shared
+machines. Reopening does not restore a dataset or rerun a procedure. Manual-entry
+Normality/Survival tabs do not yet offer cloud saving.
+
+Frontend tests mock Supabase to verify sign-in requests, consent, ownership filters,
+payload limits and save/load/delete failures. They **do not replace** running the
+SQL ownership checks and the two-account live test above. Missing Supabase
+configuration leaves history disabled with an explicit message, without breaking
+the workstation.
+
 ### Development Checks (macOS/Linux)
 
 Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored

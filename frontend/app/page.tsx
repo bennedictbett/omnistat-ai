@@ -29,6 +29,7 @@ const DescriptiveStats = dynamic(() => import('@/components/analytics/Descriptiv
 const ChartStudio = dynamic(() => import('@/components/charts/ChartStudio'), { ssr: false })
 const TestWizard = dynamic(() => import('@/components/analytics/TestWizard'), { ssr: false })
 const DatasetProjects = dynamic(() => import('@/components/data/DatasetProjects'), { ssr: false })
+const AnalysisHistory = dynamic(() => import('@/components/history/AnalysisHistory'), { ssr: false })
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
@@ -81,6 +82,7 @@ export default function Home() {
           {activeTab === 'descriptive' && <DescriptiveStats />}
           {activeTab === 'charts' && <ChartStudio data={uploadedData} />}
           {activeTab === 'wizard' && <TestWizard />}
+          {activeTab === 'history' && <AnalysisHistory />}
         </main>
       </div>
     </div>
