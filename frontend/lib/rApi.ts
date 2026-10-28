@@ -77,6 +77,70 @@ export async function prepareRPlan(
   return body
 }
 
+export interface AssumptionCheck {
+  id: string
+  label: string
+  status: 'ok' | 'warning' | 'info' | 'not_assessed'
+  detail: string
+  n?: number | null
+  statistic?: number | null
+  p_value?: number | null
+}
+
+export interface AssumptionReport {
+  procedure: string
+  variables: Record<string, string>
+  data_sha256: string
+  alpha: number
+  checks: AssumptionCheck[]
+  suggestion: { test: string | null; title: string; reason: string } | null
+  notes: string[]
+}
+
+const CHECK_STATUSES = ['ok', 'warning', 'info', 'not_assessed']
+
+function isAssumptionReport(value: unknown): value is AssumptionReport {
+  const s = isRecord(value) ? value.suggestion : undefined
+  return isRecord(value) && typeof value.procedure === 'string' && typeof value.data_sha256 === 'string' &&
+    isRecord(value.variables) && Object.values(value.variables).every((v) => typeof v === 'string') &&
+    typeof value.alpha === 'number' &&
+    Array.isArray(value.checks) && value.checks.every((c) => isRecord(c) && typeof c.id === 'string' &&
+      typeof c.label === 'string' && typeof c.detail === 'string' && CHECK_STATUSES.includes(c.status as string)) &&
+    (s === null || (isRecord(s) && (s.test === null || typeof s.test === 'string') &&
+      typeof s.title === 'string' && typeof s.reason === 'string')) &&
+    Array.isArray(value.notes) && value.notes.every((n) => typeof n === 'string')
+}
+
+/** Read-only diagnostics for a reviewed plan; rejects reports that do not describe the same data and columns. */
+export async function fetchAssumptionChecks(
+  plan: AnalysisPlan, rows: Record<string, unknown>[],
+): Promise<AssumptionReport> {
+  let response: Response
+  try {
+    response = await fetch('/api/r/checks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: plan.procedure, variables: plan.variables, data: trimRows(rows, Object.values(plan.variables)) }),
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch {
+    throw new RApiError(0, 'Could not run assumption checks. Check your connection.')
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new RApiError(502, 'The server returned unreadable assumption checks.')
+  }
+  if (!response.ok) throw new RApiError(response.status, detailText(body) ?? 'Could not run assumption checks.')
+  if (!isAssumptionReport(body)) throw new RApiError(502, 'The server returned invalid assumption checks.')
+  if (body.procedure !== plan.procedure || body.data_sha256 !== plan.data_sha256 ||
+    JSON.stringify(body.variables) !== JSON.stringify(plan.variables)) {
+    throw new RApiError(409, 'The assumption checks do not match this plan. Review the plan again.')
+  }
+  return body
+}
+
 export interface RRunResult {
   analysis_plan?: AnalysisPlan
   ok: boolean
