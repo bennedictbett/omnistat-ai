@@ -1,0 +1,379 @@
+{
+ "chi_square": {
+  "duration_s": 0.204,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "cramers_v": 0.201801838198894,
+   "df": 1,
+   "fisher_exact_p": 0.462137352376443,
+   "observed": [
+    {
+     "Var1": "Control",
+     "Var2": "No",
+     "count": 7
+    },
+    {
+     "Var1": "Treatment",
+     "Var2": "No",
+     "count": 10
+    },
+    {
+     "Var1": "Control",
+     "Var2": "Yes",
+     "count": 8
+    },
+    {
+     "Var1": "Treatment",
+     "Var2": "Yes",
+     "count": 5
+    }
+   ],
+   "p_value": 0.461197683491578,
+   "pct_expected_counts_below_5": 0,
+   "statistic_chi2": 0.542986425339367,
+   "test": "Chi-square (Yates continuity correction, 2x2)"
+  },
+  "test": "chi_square",
+  "timed_out": false,
+  "title": "Chi-square test of independence",
+  "variables": {
+   "var1": "arm",
+   "var2": "smoker"
+  }
+ },
+ "independent_t_test": {
+  "duration_s": 0.247,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "assumption_shapiro_p_by_group": {
+    "Control": 0.97313167661451,
+    "Treatment": 0.05186093101114
+   },
+   "ci_95": [
+    -13.0771141714855,
+    5.17044750481878
+   ],
+   "cohens_d": -0.324196014756443,
+   "df": 27.810367380798,
+   "groups": [
+    {
+     "group": "Control",
+     "mean": 126.54,
+     "n": 15,
+     "sd": 11.6799461838291
+    },
+    {
+     "group": "Treatment",
+     "mean": 130.493333333333,
+     "n": 15,
+     "sd": 12.6877593804122
+    }
+   ],
+   "mean_difference": -3.95333333333335,
+   "p_value": 0.382237534305022,
+   "statistic_t": -0.887847351676908,
+   "test": "Welch two-sample t-test"
+  },
+  "test": "independent_t_test",
+  "timed_out": false,
+  "title": "Independent samples t-test (Welch)",
+  "variables": {
+   "group": "arm",
+   "outcome": "sbp"
+  }
+ },
+ "kruskal_wallis": {
+  "duration_s": 0.22,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "df": 2,
+   "epsilon_squared": 0.452959501557632,
+   "groups": [
+    {
+     "group": "East",
+     "median": 139.2,
+     "n": 10,
+     "q1": 134.4,
+     "q3": 143.325
+    },
+    {
+     "group": "North",
+     "median": 118.5,
+     "n": 10,
+     "q1": 113.325,
+     "q3": 126.525
+    },
+    {
+     "group": "South",
+     "median": 127.4,
+     "n": 10,
+     "q1": 118.8,
+     "q3": 135.7
+    }
+   ],
+   "p_value": 0.0014047263377282,
+   "post_hoc_pairwise": [
+    {
+     "comparison": "North vs East",
+     "p_adj": 0.00174851982953782
+    },
+    {
+     "comparison": "South vs East",
+     "p_adj": 0.0622911415820549
+    },
+    {
+     "comparison": "South vs North",
+     "p_adj": 0.121084583430322
+    }
+   ],
+   "statistic_H": 13.1358255451713,
+   "test": "Kruskal-Wallis rank sum test"
+  },
+  "test": "kruskal_wallis",
+  "timed_out": false,
+  "title": "Kruskal-Wallis test (3+ groups)",
+  "variables": {
+   "group": "site",
+   "outcome": "sbp"
+  }
+ },
+ "mann_whitney_u": {
+  "duration_s": 0.209,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "groups": [
+    {
+     "group": "Control",
+     "median": 126.8,
+     "n": 15,
+     "q1": 119,
+     "q3": 133.8
+    },
+    {
+     "group": "Treatment",
+     "median": 135.7,
+     "n": 15,
+     "q1": 118.95,
+     "q3": 139.8
+    }
+   ],
+   "location_shift_ci_95": [
+    -14.6999516213133,
+    5.89996982946229
+   ],
+   "p_value": 0.329638126210561,
+   "rank_biserial_r": -0.213333333333333,
+   "statistic_W": 88.5,
+   "test": "Mann-Whitney U"
+  },
+  "test": "mann_whitney_u",
+  "timed_out": false,
+  "title": "Mann-Whitney U (Wilcoxon rank-sum)",
+  "variables": {
+   "group": "arm",
+   "outcome": "sbp"
+  }
+ },
+ "one_way_anova": {
+  "duration_s": 0.224,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "F": 11.1899470793229,
+   "assumption_fligner_p": 0.0517609233682956,
+   "assumption_shapiro_p_residuals": 0.563592219782011,
+   "df_between": 2,
+   "df_within": 27,
+   "eta_squared": 0.453218755122167,
+   "groups": [
+    {
+     "group": "East",
+     "mean": 138.86,
+     "n": 10,
+     "sd": 6.16499076326244
+    },
+    {
+     "group": "North",
+     "mean": 119.25,
+     "n": 10,
+     "sd": 10.5850261113413
+    },
+    {
+     "group": "South",
+     "mean": 127.44,
+     "n": 10,
+     "sd": 10.4892749458144
+    }
+   ],
+   "p_value": 0.000288724559447649,
+   "post_hoc_tukey": [
+    {
+     "comparison": "North-East",
+     "diff": -19.61,
+     "lwr": -29.9341233298122,
+     "p_adj": 0.000191036013324819,
+     "upr": -9.28587667018781
+    },
+    {
+     "comparison": "South-East",
+     "diff": -11.42,
+     "lwr": -21.7441233298122,
+     "p_adj": 0.0279252311374611,
+     "upr": -1.09587667018781
+    },
+    {
+     "comparison": "South-North",
+     "diff": 8.19,
+     "lwr": -2.13412332981219,
+     "p_adj": 0.139878475691054,
+     "upr": 18.5141233298122
+    }
+   ],
+   "test": "One-way ANOVA"
+  },
+  "test": "one_way_anova",
+  "timed_out": false,
+  "title": "One-way ANOVA with Tukey HSD",
+  "variables": {
+   "group": "site",
+   "outcome": "sbp"
+  }
+ },
+ "paired_t_test": {
+  "duration_s": 0.202,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "assumption_shapiro_p_differences": 0.473462722678,
+   "ci_95": [
+    4.3571563847162,
+    9.92951028195047
+   ],
+   "cohens_dz": 0.95735646111754,
+   "df": 29,
+   "mean_difference": 7.14333333333334,
+   "n_pairs": 30,
+   "p_value": 1.28866317611391e-05,
+   "statistic_t": 5.24365729327394,
+   "summary": [
+    {
+     "mean": 140.513333333333,
+     "n": 30,
+     "sd": 13.086969917028,
+     "variable": "before"
+    },
+    {
+     "mean": 133.37,
+     "n": 30,
+     "sd": 14.3013177593945,
+     "variable": "after"
+    }
+   ],
+   "test": "Paired t-test"
+  },
+  "test": "paired_t_test",
+  "timed_out": false,
+  "title": "Paired t-test",
+  "variables": {
+   "first": "before",
+   "second": "after"
+  }
+ },
+ "pearson_correlation": {
+  "duration_s": 0.202,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "ci_95": [
+    0.739656888072178,
+    0.935921122464317
+   ],
+   "n": 30,
+   "p_value": 4.98022443302793e-10,
+   "r": 0.868493716104438,
+   "spearman_p_value": 5.67164902401193e-11,
+   "spearman_rho": 0.888419184494051,
+   "test": "Pearson correlation"
+  },
+  "test": "pearson_correlation",
+  "timed_out": false,
+  "title": "Pearson correlation (with Spearman for comparison)",
+  "variables": {
+   "x": "dose",
+   "y": "response"
+  }
+ },
+ "shapiro_wilk": {
+  "duration_s": 0.194,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "W": 0.959657155007458,
+   "n": 30,
+   "normal_at_0.05": true,
+   "p_value": 0.303578534321951,
+   "test": "Shapiro-Wilk"
+  },
+  "test": "shapiro_wilk",
+  "timed_out": false,
+  "title": "Shapiro-Wilk normality test",
+  "variables": {
+   "variable": "sbp"
+  }
+ },
+ "wilcoxon_signed_rank": {
+  "duration_s": 0.201,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "hodges_lehmann_shift": 7.39998013484959,
+   "median_difference": 8.35000000000001,
+   "n_pairs": 30,
+   "n_zero_differences": 0,
+   "p_value": 0.000130341588311156,
+   "rank_biserial_r": 0.802150537634409,
+   "shift_ci_95": [
+    4.30005712117398,
+    10.3500254297185
+   ],
+   "statistic_V": 419,
+   "summary": [
+    {
+     "median": 145.2,
+     "n": 30,
+     "q1": 129.2,
+     "q3": 149.35,
+     "variable": "before"
+    },
+    {
+     "median": 134.2,
+     "n": 30,
+     "q1": 126.075,
+     "q3": 141.55,
+     "variable": "after"
+    }
+   ],
+   "test": "Wilcoxon signed-rank test"
+  },
+  "test": "wilcoxon_signed_rank",
+  "timed_out": false,
+  "title": "Wilcoxon signed-rank test (paired)",
+  "variables": {
+   "first": "before",
+   "second": "after"
+  }
+ }
+}
