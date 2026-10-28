@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "axios": "^1.20.0",
     "docx": "^9.15.0",
     "lucide-react": "^1.41.0",
