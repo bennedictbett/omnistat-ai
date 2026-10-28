@@ -5,7 +5,20 @@ import dynamic from 'next/dynamic'
 import Sidebar from '@/components/core/Sidebar'
 import Header from '@/components/core/Header'
 import { UploadResult } from '@/lib/api'
+import { DatasetProject } from '@/lib/projects'
 import { loadUploadedData } from '@/lib/rApi'
+
+const SOURCE_KEY = 'omnistat_data_source'
+
+/** Replaces the active dataset; throws if browser storage rejects it, leaving the previous dataset active. */
+function activateDataset(data: UploadResult, source: string) {
+  localStorage.setItem('omnistat_data', JSON.stringify(data))
+  try {
+    localStorage.setItem(SOURCE_KEY, source)
+  } catch {
+    localStorage.removeItem(SOURCE_KEY)
+  }
+}
 
 const JarvisInput = dynamic(() => import('@/components/jarvis/JarvisInput'), { ssr: false })
 const FileUpload = dynamic(() => import('@/components/data/FileUpload'), { ssr: false })
@@ -15,10 +28,12 @@ const SurvivalCurve = dynamic(() => import('@/components/analytics/SurvivalCurve
 const DescriptiveStats = dynamic(() => import('@/components/analytics/DescriptiveStats'), { ssr: false })
 const ChartStudio = dynamic(() => import('@/components/charts/ChartStudio'), { ssr: false })
 const TestWizard = dynamic(() => import('@/components/analytics/TestWizard'), { ssr: false })
+const DatasetProjects = dynamic(() => import('@/components/data/DatasetProjects'), { ssr: false })
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('jarvis')
   const [uploadedData, setUploadedData] = useState<any>(null)
+  const [source, setSource] = useState<string | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,17 +41,26 @@ export default function Home() {
       if (loadUploadedData()) {
         const saved = localStorage.getItem('omnistat_data')
         if (saved) setUploadedData(JSON.parse(saved))
+        setSource(localStorage.getItem(SOURCE_KEY))
       }
     } catch (e) {
       setStorageError(e instanceof Error ? e.message : 'Could not restore the dataset. Upload your file again.')
     }
   }, [])
 
-  const handleUpload = (data: UploadResult) => {
-    localStorage.setItem('omnistat_data', JSON.stringify(data))
+  const handleUpload = (data: UploadResult, fileName: string) => {
+    activateDataset(data, fileName)
     setUploadedData(data)
+    setSource(fileName)
     setStorageError(null)
     setActiveTab('summary')
+  }
+
+  const handleOpenProject = (project: DatasetProject) => {
+    activateDataset(project.dataset, project.source_file)
+    setUploadedData(project.dataset)
+    setSource(project.source_file)
+    setStorageError(null)
   }
 
   return (
@@ -48,6 +72,9 @@ export default function Home() {
           {storageError && <p role="alert" className="mb-4 text-sm text-red-400">{storageError}</p>}
           {activeTab === 'jarvis' && <JarvisInput />}
           {activeTab === 'upload' && <FileUpload onUpload={handleUpload} />}
+          {activeTab === 'projects' && (
+            <DatasetProjects current={uploadedData} currentSource={source} onOpen={handleOpenProject} />
+          )}
           {activeTab === 'summary' && <DataSummary data={uploadedData} />}
           {activeTab === 'normality' && <NormalityTest />}
           {activeTab === 'survival' && <SurvivalCurve />}

@@ -170,6 +170,30 @@ the dashboard explicitly says the audit is unavailable and requests a fresh
 upload. Invalid audit versions or structures are reported rather than shown as
 clean. No raw values are logged by these checks.
 
+### Dataset Projects (This Browser)
+
+Use **Projects** in the sidebar to keep several uploaded datasets on this device:
+
+1. Upload a CSV or Excel file, then open **Projects**.
+2. Enter a project name (1–100 characters) and select **Save project**.
+3. Select **Open** on a saved project to make it the active dataset for the
+   summary, Jarvis, Test Wizard and other analyses. Opening a project does not
+   upload it or rerun anything.
+4. **Delete** requires confirmation.
+
+Each project stores the complete validated upload response (all rows, columns
+and audit, when available), the original filename and save time, in the
+browser's IndexedDB. Projects are **not uploaded, synced or encrypted** by
+OmniStat. Anyone with access to this browser profile may be able to read them,
+and clearing site data or using another browser/device removes access. Save only
+data you are authorized to store on this device.
+
+Saving is never automatic. Damaged or unrecognized saved records are reported
+and can be deleted, but are never opened. If the browser cannot store a project,
+or cannot make a large project the active dataset, an explicit error is shown and
+the previous active dataset remains in use. Projects store datasets only; analysis
+results are not saved with them.
+
 ### Reproducibility ZIP Export
 
 After a successful R analysis, the shared analysis panel offers **Download ZIP**.
