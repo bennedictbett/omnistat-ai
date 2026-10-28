@@ -1,3 +1,4 @@
+import { explainResult, explanationText } from './explainResult'
 import { asCurveFit, formatNumber, isPKey, prettyKey, RRunResult } from './rApi'
 
 export const MAX_REPORT_TABLE_ROWS = 200
@@ -44,7 +45,9 @@ function compound(key: string, value: unknown): string {
 }
 
 /** Builds a self-contained, script-free HTML report from a completed analysis. */
-export function buildReportHtml(result: RRunResult, generatedAt: Date = new Date()): string {
+export function buildReportHtml(
+  result: RRunResult, generatedAt: Date = new Date(), valueLabels: Record<string, Record<string, string>> = {},
+): string {
   if (!result.ok) throw new Error('Only successful analyses can be reported.')
   const r = result.results
   const testName = typeof r.test === 'string' ? r.test : result.title
@@ -81,6 +84,12 @@ export function buildReportHtml(result: RRunResult, generatedAt: Date = new Date
     .map(([k, v]) => `<h3>${escapeHtml(prettyKey(k))}</h3>${compound(k, v)}`).join('')
   const charts = result.plots.filter((b64) => /^[A-Za-z0-9+/]+={0,2}$/.test(b64))
   const skippedCharts = result.plots.length - charts.length
+  const explanation = explainResult(result, valueLabels)
+  const summary = explanation
+    ? `<h2>Plain-English summary</h2>${explanation.paragraphs.map((p) => `<p>${escapeHtml(explanationText(p))}</p>`).join('')}` +
+      `<ul>${explanation.caveats.map((c) => `<li>${escapeHtml(explanationText(c))}</li>`).join('')}</ul>` +
+      '<p class="note">Generated from fixed rules, not AI. Every number is taken directly from the results below.</p>'
+    : ''
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -101,6 +110,7 @@ pre{white-space:pre-wrap;word-break:break-word;font:8pt/1.3 Menlo,monospace;back
 <p class="meta">OmniStat AI analysis report · generated ${escapeHtml(generatedAt.toISOString())}</p>
 <p class="warning">Automatically generated. Review the methods, assumptions and results with a qualified statistician before use.
 This report can contain sensitive information, such as group labels or values in tables and charts. It is a snapshot of the displayed result, not a signed attestation.</p>
+${summary}
 <h2>Methods</h2>${rows(methods)}
 ${plan ? `<h3>Declared assumptions (not all checked automatically)</h3><ul>${plan.assumptions.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>` : ''}
 <h2>Results</h2>${scalarRows.length ? rows(scalarRows) : ''}${compoundSections}
