@@ -1,5 +1,8 @@
+import datetime as dt
 import io
 import logging
+import os
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -21,15 +24,56 @@ def _json_finite(value):
     return value
 
 
+def _label_key(value) -> str:
+    """Matches how the browser displays the stored value (1.0 -> "1")."""
+    if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+        return format(float(value), ".15g")
+    return str(value)
+
+
+def _read_statistical_file(content: bytes, name: str) -> tuple[pd.DataFrame, dict, dict]:
+    """Reads SPSS/Stata files, keeping stored codes; user-defined and extended missing codes become missing."""
+    import pyreadstat
+
+    suffix = os.path.splitext(name)[1]
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, f"upload{suffix}")
+        with open(path, "wb") as handle:
+            handle.write(content)
+        reader = pyreadstat.read_dta if suffix == ".dta" else pyreadstat.read_sav
+        try:
+            df, meta = reader(path)
+        except Exception as e:
+            # pyreadstat raises its own exception types for corrupt or unsupported files.
+            raise ValueError("Unreadable SPSS or Stata file") from e
+    for column in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[column]):
+            df[column] = df[column].map(lambda v: None if pd.isna(v) else v.isoformat())
+        elif df[column].dtype == object:
+            df[column] = df[column].map(
+                lambda v: v.isoformat() if isinstance(v, (dt.date, dt.time)) else v)
+    variable_labels = {str(c): str(label) for c, label in meta.column_names_to_labels.items() if label}
+    value_labels = {
+        str(c): {_label_key(code): str(label) for code, label in labels.items()}
+        for c, labels in meta.variable_value_labels.items() if labels
+    }
+    return df, variable_labels, value_labels
+
+
 class AnalyticsService:
 
     # ── File parsing ────────────────────────────────────────────
 
     async def parse_file(self, file) -> dict:
-        """Parse uploaded Excel or CSV clinical file."""
+        """Parse an uploaded CSV, Excel, SPSS (.sav/.zsav) or Stata (.dta) file."""
         content = await file.read()
-        if file.filename.endswith(".csv"):
+        name = (file.filename or "").lower()
+        variable_labels: dict[str, str] = {}
+        value_labels: dict[str, dict[str, str]] = {}
+        if name.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
+        elif name.endswith((".sav", ".zsav", ".dta")):
+            df, variable_labels, value_labels = _read_statistical_file(content, name)
         else:
             df = pd.read_excel(io.BytesIO(content))
 
@@ -71,6 +115,8 @@ class AnalyticsService:
 
         result = {
             "audit":            audit,
+            "variable_labels":  variable_labels,
+            "value_labels":     value_labels,
             "rows":             len(df),
             "columns":          list(df.columns),
             "dtypes":           df.dtypes.astype(str).to_dict(),
