@@ -6,6 +6,7 @@ import RegressionPlot from '@/components/analytics/RegressionPlot'
 import AssumptionChecks from '@/components/jarvis/AssumptionChecks'
 import ResultExplanation from '@/components/jarvis/ResultExplanation'
 import { explainResult } from '@/lib/explainResult'
+import { analysisAuditFields, audit } from '@/lib/audit'
 import AnalysisReport from '@/components/reports/AnalysisReport'
 import ReproducibilityBundle from '@/components/reports/ReproducibilityBundle'
 import SaveAnalysis from '@/components/history/SaveAnalysis'
@@ -111,7 +112,9 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
         setChecks(report)
         setChecksError(reportError)
       } else {
-        setResult(await runRTest(test, variables, data.rows, plan ?? undefined))
+        const ran = await runRTest(test, variables, data.rows, plan ?? undefined)
+        setResult(ran)
+        audit(() => analysisAuditFields(ran))
         setPlan(null)
       }
     } catch (e) {
