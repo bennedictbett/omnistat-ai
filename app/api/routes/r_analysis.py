@@ -7,6 +7,7 @@ from app.security.rate_limit import rate_limit_r
 from app.services.r_runner import RunnerBusy
 from app.services.r_templates import TemplateError, run_named_test, supported_tests
 from app.services.analysis_plan import AnalysisPlan, prepare_analysis_plan
+from app.services.assumption_checks import check_assumptions
 from app.services.reproducibility_bundle import BundleError, BundleResult, build_bundle
 
 router = APIRouter()
@@ -41,6 +42,14 @@ def export_r_bundle(req: BundleRequest):
 def review_r_plan(req: RAnalysisRequest):
     try:
         return prepare_analysis_plan(req.test, req.variables, pd.DataFrame(req.data))
+    except TemplateError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/checks", dependencies=[Depends(rate_limit_r)])
+def check_r_assumptions(req: RAnalysisRequest):
+    try:
+        return check_assumptions(req.test, req.variables, pd.DataFrame(req.data))
     except TemplateError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

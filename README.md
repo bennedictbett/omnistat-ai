@@ -314,6 +314,40 @@ Use numeric group codes or non-numeric text labels. Numeric-looking text codes
 and the literal text label `NA` must be recoded before review to avoid R CSV
 type inference changing group membership.
 
+### Pre-Run Assumption Checks
+
+When a reviewed plan is prepared, OmniStat also runs read-only diagnostics on the
+same selected complete-case data and shows them in the review. R is not run.
+The checks are computed in Python with SciPy; tests confirm they match R's
+`shapiro.test` and a base-R Brown-Forsythe calculation.
+
+| Procedure | Checks | Suggestion when flagged |
+|-----------|--------|-------------------------|
+| Independent t-test | Shapiro-Wilk per group; Brown-Forsythe variance comparison (information only, since Welch does not assume equal variances); outliers per group | Mann-Whitney U, if the smallest group has fewer than 30 observations |
+| Paired t-test | Shapiro-Wilk and outliers for paired differences | Wilcoxon signed-rank, if there are fewer than 30 pairs |
+| One-way ANOVA | Shapiro-Wilk of residuals; Brown-Forsythe (warns, as ANOVA and Tukey assume equal variances); outliers per group | Kruskal-Wallis, if the smallest group has fewer than 30 observations |
+| Pearson correlation | Shapiro-Wilk and outliers for each variable | Interpret the Spearman correlation reported alongside |
+| Shapiro-Wilk | None; the procedure is itself a normality check | — |
+
+Each check is shown as **No concern**, **Review**, **Information** or **Not
+assessed**. Shapiro-Wilk needs 3–5000 non-constant values, and outlier flags
+(outside 1.5 × IQR) need at least 4 values. With larger samples, a note explains
+that t-tests and ANOVA are usually robust to moderate non-normality instead of
+suggesting a switch. Rank-based alternatives answer a different question
+(distributions or medians rather than means), and the review says so.
+
+Diagnostics use alpha 0.05 and are screening aids. A non-significant result does
+not prove an assumption holds; large samples can flag trivial departures; and
+independence or study design cannot be checked from the data. Outliers are for
+review, never automatic removal. Suggestions are advisory: you can continue with
+the reviewed plan, or choose the alternative in the Test Wizard or Jarvis.
+
+`POST /api/r/checks` accepts the same body as `/api/r/plan`, applies the same
+validation, API-key and rate-limit controls, and returns the checks with the
+plan's canonical columns and data SHA-256. The browser rejects reports that do
+not match the reviewed plan. If checks are unavailable, the review says so
+explicitly and the analysis can still be run.
+
 ### Development Checks (macOS/Linux)
 
 Use Python 3.11 to create an isolated environment. The `.venv` directory is ignored

@@ -4,6 +4,8 @@ import RAnalysisPanel from '@/components/jarvis/RAnalysisPanel'
 import { AnalysisPlan, runRTest } from '@/lib/rApi'
 
 const fetchMock = vi.fn()
+// Assumption checks are routed separately so call-order assertions cover plan and run requests only.
+const checksMock = vi.fn()
 const rows = Array.from({ length: 10 }, (_, i) => ({ bp: i + 1, unused: 'not sent' }))
 const spec = { title: 'Shapiro-Wilk', variables: { variable: 'Numeric column' } }
 const intentVariables = ['bp']
@@ -11,7 +13,10 @@ const intentVariables = ['bp']
 beforeEach(() => {
   localStorage.clear()
   fetchMock.mockReset()
-  vi.stubGlobal('fetch', fetchMock)
+  checksMock.mockReset()
+  checksMock.mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: 'Server is not configured' }) })
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) =>
+    url === '/api/r/checks' ? checksMock(url, init) : fetchMock(url, init))
 })
 afterEach(() => {
   cleanup()
@@ -188,4 +193,61 @@ it.each([
   fireEvent.click(screen.getByRole('button', { name: 'Confirm and Run in R' }))
   await screen.findByText('Executed analysis specification')
   expect(JSON.parse(fetchMock.mock.calls[1][1].body).analysis_plan).toEqual(reviewed)
+})
+
+const checksFor = (reviewed: AnalysisPlan, overrides: Record<string, unknown> = {}) => ({
+  procedure: reviewed.procedure, variables: reviewed.variables, data_sha256: reviewed.data_sha256, alpha: 0.05,
+  checks: [
+    { id: 'normality:A', label: 'Normality in group “A”', status: 'warning', detail: 'Shapiro-Wilk W = 0.700, p = 0.004: evidence of non-normality.' },
+    { id: 'equal_variances', label: 'Equal variances (Brown-Forsythe)', status: 'info', detail: 'Welch does not assume equal variances.' },
+    { id: 'outliers:B', label: 'Outliers in group “B”', status: 'not_assessed', detail: 'Too few values.' },
+  ],
+  suggestion: { test: 'mann_whitney_u', title: 'Mann-Whitney U (Wilcoxon rank-sum)', reason: 'Normality is questionable.' },
+  notes: ['Independence and study design cannot be checked from the data.'],
+  ...overrides,
+})
+
+it('shows assumption checks and a suggested alternative during review without running R', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  checksMock.mockResolvedValueOnce({ ok: true, json: async () => checksFor(plan) })
+  renderTTest()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  const section = await screen.findByRole('region', { name: 'Assumption checks' })
+  expect(section.textContent).toContain('evidence of non-normality')
+  expect(section.textContent).toContain('(Review)')
+  expect(section.textContent).toContain('(Not assessed)')
+  expect(screen.getByRole('note').textContent).toContain('Consider: Mann-Whitney U')
+  expect(JSON.parse(checksMock.mock.calls[0][1].body)).toEqual({
+    test: 'independent_t_test', variables: plan.variables,
+    data: rows.map((row, i) => ({ bp: row.bp, arm: i < 5 ? 'A' : 'B' })),
+  })
+  expect(fetchMock).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: 'Confirm and Run in R' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel review' }))
+  expect(screen.queryByRole('region', { name: 'Assumption checks' })).toBeNull()
+})
+
+it('rejects checks for different data and keeps the plan usable', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  checksMock.mockResolvedValueOnce({ ok: true, json: async () => checksFor(plan, { data_sha256: 'b'.repeat(64) }) })
+  renderTTest()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert.textContent).toContain('do not match this plan')
+  expect(screen.queryByRole('region', { name: 'Assumption checks' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Confirm and Run in R' })).toBeTruthy()
+})
+
+it('reports unavailable or malformed checks explicitly', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  checksMock.mockResolvedValueOnce({ ok: true, json: async () => checksFor(plan, { checks: [{ id: 'x', status: 'great' }] }) })
+  renderTTest()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('invalid assumption checks')
+  cleanup()
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  checksMock.mockRejectedValueOnce(new TypeError('offline'))
+  renderTTest()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Could not run assumption checks')
 })
