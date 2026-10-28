@@ -5,7 +5,10 @@ import { Printer } from 'lucide-react'
 import { RRunResult } from '@/lib/rApi'
 import { buildReportHtml, printReport } from '@/lib/analysisReport'
 
-export default function AnalysisReport({ result }: { result: RRunResult }) {
+export default function AnalysisReport({ result, valueLabels = {} }: {
+  result: RRunResult
+  valueLabels?: Record<string, Record<string, string>>
+}) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!result.ok) return null
@@ -14,7 +17,7 @@ export default function AnalysisReport({ result }: { result: RRunResult }) {
     setBusy(true)
     setError(null)
     try {
-      await printReport(buildReportHtml(result))
+      await printReport(buildReportHtml(result, new Date(), valueLabels))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not prepare the report. Your result remains on screen.')
     } finally {

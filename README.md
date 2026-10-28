@@ -217,11 +217,38 @@ or cannot make a large project the active dataset, an explicit error is shown an
 the previous active dataset remains in use. Projects store datasets only; analysis
 results are not saved with them.
 
+### Plain-English Result Summaries
+
+Successful results for the independent and paired t-tests, one-way ANOVA,
+Pearson correlation, Shapiro-Wilk, Mann-Whitney U, Wilcoxon signed-rank,
+Kruskal-Wallis and chi-square tests start with a **Plain-English summary**. It
+describes group summaries, the direction and interval of the difference,
+statistical significance at the 0.05 level, effect size with conventional
+benchmarks, post-hoc comparisons below 0.05 and relevant assumption warnings.
+
+The summary is generated from fixed rules in the browser, not by AI, so it cannot
+invent numbers:
+
+- Every number is read from a named result field (for example
+  `results.groups[0].mean`); hover over an underlined number to see its source.
+  The only other figures are the fixed method settings `95%` and `0.05`.
+- If any required value is missing or invalid, no summary is shown rather than a
+  partial one.
+- Non-significant results are not described as showing no difference, and
+  significance is not presented as clinical importance or causation.
+- Group codes are shown with SPSS/Stata value labels, for example “1” (Male).
+
+Tests explain real R outputs for all nine procedures (stored in
+`frontend/tests/fixtures/rResults.json`) and independently verify that every
+number matches its source field. Other procedures show the results without a
+summary. The printable report includes the same summary.
+
 ### Printable Analysis Report
 
 After a successful R analysis, select **Print / Save as PDF** below the result.
 Your browser's print dialog opens with a report containing:
 
+- the plain-English summary, when available;
 - methods: procedure, R version, selected columns, data SHA-256 and, for
   reviewed plans, row counts, missing-data handling, settings, group sizes and
   declared assumptions (not all are checked automatically);

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
 import AssumptionChecks from '@/components/jarvis/AssumptionChecks'
+import ResultExplanation from '@/components/jarvis/ResultExplanation'
+import { explainResult } from '@/lib/explainResult'
 import AnalysisReport from '@/components/reports/AnalysisReport'
 import ReproducibilityBundle from '@/components/reports/ReproducibilityBundle'
 import {
@@ -244,8 +246,9 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
         </div>
       )}
 
+      {result?.ok && <ResultExplanation explanation={explainResult(result, data.valueLabels)} />}
       {result && <ResultView result={result} />}
-      {result && <AnalysisReport result={result} />}
+      {result && <AnalysisReport result={result} valueLabels={data.valueLabels} />}
       {result && <ReproducibilityBundle key={JSON.stringify(result.variables)} result={result} rows={data.rows} />}
       {result?.analysis_plan && (
         <details className="text-xs text-gray-400">
