@@ -16,54 +16,77 @@ OmniStat closes both gaps: it understands what you want, runs the analysis, and 
 
 ## What's Built
 
-### Jarvis AI Agent
-Type your research question in plain English. Jarvis identifies the correct statistical test, extracts the required variables, lists assumptions to check, and executes the analysis automatically.
+### Jarvis AI Agent and Test Wizard
+Type a research question in plain English (or speak it). Jarvis identifies the
+statistical test and suggests columns; you confirm the columns before anything
+runs. The **Test Wizard** reaches the same tests by answering a few questions.
 
 ```
-"Compare blood pressure between two groups before and after treatment"
-→ test: repeated_measures_anova
-→ variables: [blood_pressure, group, time_point]
-→ assumptions: [normality, sphericity, equal_variances]
-→ Run Analysis → results rendered inline
+"Compare blood pressure between treatment and control"
+→ test: independent_t_test (Welch)
+→ choose columns → review plan and assumption checks → run in R
 ```
 
-### Visual Data Dashboard
-Upload any CSV, Excel, SPSS or Stata file — OmniStat instantly generates:
-- **Overview** — row/column counts, numeric summary table (mean, median, std, min, max)
-- **Distributions** — histograms for every numeric column
-- **Categorical** — donut pie charts + bar charts for every categorical column
-- **Correlation** — full Pearson correlation heatmap with strong correlation insights
+### Data
+- Upload **CSV, Excel, SPSS (`.sav`/`.zsav`) or Stata (`.dta`)**, keeping
+  variable and value labels.
+- Automatic **data-quality audit**: missing values, duplicates, empty or
+  constant columns, numeric-looking text and infinities.
+- **Data dashboard**: overview, distributions, categorical charts, correlations.
+- **Dataset projects** saved in the browser.
 
-### Statistical Analysis Modules
-| Module | Description |
-|--------|-------------|
-| Normality Test | Shapiro-Wilk test with interpretation and clinical guidance |
-| Survival Curve | Kaplan-Meier with median survival time and interactive chart |
-| Descriptive Stats | Mean, median, SD, IQR, range, variance, skewness, kurtosis |
+### Statistical Analyses (R)
+| Area | Procedures |
+|------|------------|
+| Group comparisons | Welch t-test, paired t-test, one-way ANOVA with Tukey, Mann-Whitney U, Wilcoxon signed-rank, Kruskal-Wallis |
+| Association | Pearson (with Spearman) correlation, chi-square with Fisher's exact test |
+| Models | Linear and logistic regression with diagnostics |
+| Other | Shapiro-Wilk normality, dose-response (4PL) and Michaelis-Menten curve fitting |
+| Browser tools | Descriptive statistics, Kaplan-Meier survival curves, power and math tools |
+
+### Trust and Transparency
+- **Reviewed analysis plan** before execution, re-verified by the server.
+- **Assumption checks** with suggested alternatives for small samples.
+- **R code** shown for every result, with a SHA-256 fingerprint of the data.
+- **Plain-English summaries** in which every number links to its source.
+
+### Reports and Reproducibility
+- **Print / Save as PDF** and **Word (.docx) with APA 7 formatting**.
+- **Reproducibility ZIP** with data, R script, results, plan, charts and manifest.
+
+### Accounts and Audit (optional, Supabase)
+- Email sign-in and **cloud analysis history** visible only to its owner.
+- **Tamper-evident audit log** of uploads, runs, saves and exports, with
+  integrity verification and JSON export.
+
+See the sections under [Getting Started](#getting-started) for details,
+limitations and setup of each feature.
 
 ---
 
 ## Architecture
 
 ```
-User (Natural Language / File Upload)
+User (text, voice, point-and-click, file upload)
         ↓
-Next.js 14 Frontend (React + Tailwind)
-        ↓
-FastAPI Backend (Python)
-        ↓
-┌──────────────────┬─────────────────────┐
-│  Jarvis Agent    │  Analytics Engine   │
-│  Groq LLaMA3     │  scipy + lifelines  │
-│  Intent routing  │  pandas + numpy     │
-└──────────────────┴─────────────────────┘
+Next.js 14 frontend (React, Tailwind, Recharts, Plotly)
+  · server-side proxies hold the API key
+  · reports, explanations and projects are built in the browser
+        ↓                                   ↓ (optional)
+FastAPI backend (Python)                 Supabase
+  · Jarvis agent (Groq + intent model)     · Auth (email link or code)
+  · upload, audit, plans, checks           · analysis history (RLS)
+  · sandboxed R worker (curated templates) · hash-chained audit log
+  · math and voice (Whisper) workers
 ```
 
 **Stack:**
-- **Backend:** FastAPI + Python (scipy, lifelines, pandas, numpy)
-- **AI Agent:** Groq (`groq/compound` model) for natural language → statistical intent
-- **Frontend:** Next.js 14 + Tailwind CSS + Recharts
-- **Data:** CSV, Excel, SPSS (`.sav`/`.zsav`) and Stata (`.dta`) parsing with automatic column type detection and variable/value labels
+- **Backend:** FastAPI, Python 3.11 (pandas, numpy, scipy, lifelines, pyreadstat)
+- **Statistics engine:** R (curated templates; `jsonlite`) in a resource-limited worker
+- **AI:** Groq for intent extraction and voice transcription; a local intent classifier
+- **Frontend:** Next.js 14, Tailwind CSS, Recharts, Plotly, `docx`
+- **Accounts and audit:** Supabase Auth and PostgreSQL with row-level security
+- **Testing:** pytest, Vitest and GitHub Actions
 
 ---
 
@@ -603,33 +626,48 @@ or ruleset for `master`; the workflow alone does not enforce merge protection.
 
 ## API Endpoints
 
+R, math and voice endpoints require the server-side API key and are rate limited;
+the browser reaches them through Next.js proxies.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/analytics/upload` | Upload CSV/Excel/SPSS/Stata — returns full stats, labels + visualization data |
+| POST | `/api/analytics/upload` | Upload CSV/Excel/SPSS/Stata; returns data, labels, audit and dashboard statistics |
+| POST | `/api/analytics/descriptive` | Descriptive statistics |
 | POST | `/api/analytics/normality` | Shapiro-Wilk normality test |
 | POST | `/api/analytics/survival` | Kaplan-Meier survival curve |
-| POST | `/api/analytics/descriptive` | Full descriptive statistics |
+| POST | `/api/analytics/compare-groups`, `/compare-paired`, `/correlation`, `/regression`, `/categorical`, `/power` | Python statistics endpoints |
 | POST | `/api/agent/query` | Natural language → statistical intent |
+| GET | `/api/r/tests` | Available R procedures and their column roles |
+| POST | `/api/r/plan` | Prepare a reviewed analysis plan (no execution) |
+| POST | `/api/r/checks` | Pre-run assumption checks (no execution) |
+| POST | `/api/r/run` | Run an R procedure, optionally against a reviewed plan |
+| POST | `/api/r/bundle` | Build a reproducibility ZIP from a result |
+| GET/POST | `/api/math/operations`, `/api/math/run` | Symbolic and numeric math |
+| POST | `/api/voice/transcribe` | Speech to text for Jarvis |
 
 ---
 
 ## Roadmap
 
-### In Progress
-- [ ] Bland-Altman plots for method comparison
-- [ ] Levey-Jennings charts with Westgard rules (lab QC)
-- [ ] ROC curve analysis with AUC optimization
-- [ ] Competing risks survival analysis
+Prioritised against the NexStat technical specification.
 
-### Planned
-- [ ] DuckDB Wasm for large dataset support (100M+ rows)
-- [ ] DICOM/medical imaging ingestion via ONNX
-- [ ] Bayesian probabilistic programming
-- [ ] GWAS genomics pipelines
-- [ ] CDISC compliance (SDTM/ADaM) for pharma/clinical trials
-- [ ] Federated mesh ML across institutions
-- [ ] Mobile companion app (voice-driven, OCR table scanner)
-- [ ] Peer-to-peer collaboration with real-time sync
+### Next
+- [ ] Plain-English summaries and APA statements for linear and logistic regression
+- [ ] Golden test datasets with reference outputs for every procedure
+- [ ] Basic maps: offline tiles, boundaries, choropleth and heatmaps
+
+### Phase 1 remaining
+- [ ] Python cross-check of R results
+- [ ] Stronger sandboxing (containers without network access)
+- [ ] Large datasets with Arrow/DuckDB (1 million rows on 8 GB RAM)
+- [ ] Offline desktop app (Electron or Tauri) with local AI models
+- [ ] Privacy tools: identifier detection, pseudonymisation, encryption at rest, roles
+
+### Later
+- [ ] Survival models, mixed models, GLM family, multivariate methods
+- [ ] Epidemiology: epidemic curves, 2×2 tables; spatial hotspots (Moran's I, Gi*)
+- [ ] DHIS2 connector, collaboration, Bayesian methods, meta-analysis, time series
+- [ ] Bland-Altman, Levey-Jennings with Westgard rules, ROC analysis
 
 ---
 
@@ -638,26 +676,32 @@ or ruleset for `master`; the workflow alone does not enforce merge protection.
 ```
 omnistat-ai/
 ├── app/
-│   ├── agents/
-│   │   ├── analyst_agent.py     # Groq-powered Jarvis agent
-│   │   └── prompts.py           # Statistical intent prompt
-│   ├── api/routes/
-│   │   ├── analytics.py         # Statistical analysis endpoints
-│   │   └── agent.py             # Natural language query endpoint
+│   ├── agents/                  # Jarvis agent and prompts
+│   ├── api/routes/              # analytics, agent, r_analysis, math, voice
+│   ├── security/                # API keys and rate limits
 │   ├── services/
-│   │   └── analytics_service.py # Core statistical computation
-│   └── main.py                  # FastAPI app entry point
+│   │   ├── analytics_service.py # Upload parsing and Python statistics
+│   │   ├── data_audit.py        # Upload data-quality audit
+│   │   ├── analysis_plan.py     # Reviewed analysis plans
+│   │   ├── assumption_checks.py # Pre-run diagnostics
+│   │   ├── r_templates.py       # Curated R procedures
+│   │   ├── r_runner.py          # Resource-limited R worker
+│   │   └── reproducibility_bundle.py
+│   └── main.py                  # FastAPI entry point
 ├── frontend/
-│   ├── app/
-│   │   └── page.tsx             # Main dashboard
-│   └── components/
-│       ├── core/                # Sidebar, Header
-│       ├── jarvis/              # AI agent UI
-│       ├── data/                # Upload + Data Dashboard
-│       └── analytics/           # Normality, Survival, Descriptive
-├── data/raw/                    # Sample clinical datasets
-├── requirements.txt
-└── .env.example
+│   ├── app/                     # Pages and server-side API proxies
+│   ├── components/              # accounts, analytics, audit, charts, data,
+│   │                            # history, jarvis, reports
+│   ├── lib/                     # API clients, APA, explanations, reports,
+│   │                            # projects, history, audit, Supabase
+│   └── tests/                   # Vitest tests and real R fixtures
+├── supabase/
+│   ├── migrations/              # History and audit log tables
+│   └── tests/                   # SQL ownership and integrity checks
+├── tests/                       # pytest suite
+├── requirements.txt             # Backend dependencies
+├── requirements-dev.txt         # Plus test dependencies
+└── build.sh                     # Render build script
 ```
 
 ---
