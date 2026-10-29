@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AccountControls from '@/components/accounts/AccountControls'
+import AuditLog from '@/components/audit/AuditLog'
 import { useAccount } from '@/components/accounts/AccountProvider'
 import { ResultView } from '@/components/jarvis/RAnalysisPanel'
 import { deleteAnalysis, HISTORY_PAGE_SIZE, HistoryItem, listAnalyses, openAnalysis } from '@/lib/history'
@@ -15,6 +16,7 @@ export default function AnalysisHistory() {
       <h2 className="text-lg font-semibold">Account and Analysis History</h2>
       <AccountControls />
       {user && <UserHistory key={user.id} userId={user.id} />}
+      {user && <AuditLog key={`audit-${user.id}`} />}
     </div>
   )
 }

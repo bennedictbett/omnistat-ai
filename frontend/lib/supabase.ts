@@ -10,9 +10,29 @@ interface Database {
         Update: never
         Relationships: []
       }
+      audit_events: {
+        Row: {
+          id: number; event_id: string; user_id: string; seq: number; created_at: string; action: string
+          procedure: string | null; engine: string | null; spec_hash: string | null; dataset_hash: string | null
+          code_hash: string | null; warnings: string[]; result_bundle_id: string | null
+          details: Record<string, unknown>; prev_hash: string; hash: string
+        }
+        Insert: {
+          action: string; procedure: string | null; engine: string | null; spec_hash: string | null
+          dataset_hash: string | null; code_hash: string | null; warnings: string[]
+          result_bundle_id: string | null; details: Record<string, unknown>
+        }
+        Update: never
+        Relationships: []
+      }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      verify_audit_chain: {
+        Args: Record<string, never>
+        Returns: { ok: boolean; events: number; first_invalid_seq: number | null; reason: string | null }[]
+      }
+    }
   }
 }
 

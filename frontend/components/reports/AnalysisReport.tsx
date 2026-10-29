@@ -5,6 +5,7 @@ import { FileText, Printer } from 'lucide-react'
 import { RRunResult } from '@/lib/rApi'
 import { buildReportHtml, printReport } from '@/lib/analysisReport'
 import { buildWordReport, downloadWordReport } from '@/lib/wordReport'
+import { analysisAuditFields, audit } from '@/lib/audit'
 
 export default function AnalysisReport({ result, valueLabels = {} }: {
   result: RRunResult
@@ -20,6 +21,9 @@ export default function AnalysisReport({ result, valueLabels = {} }: {
     try {
       if (kind === 'print') await printReport(buildReportHtml(result, new Date(), valueLabels))
       else downloadWordReport(await buildWordReport(result, valueLabels), result.title)
+      audit(() => analysisAuditFields(result).then((fields) => ({
+        ...fields, action: 'export' as const, details: { ...fields.details, format: kind === 'print' ? 'pdf_print' : 'docx' },
+      })))
     } catch (e) {
       setError(kind === 'word'
         ? 'Could not create the Word document. Your result remains on screen.'

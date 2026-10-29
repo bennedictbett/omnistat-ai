@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { Upload, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
 import { ApiError, UploadResult, uploadDataset } from '@/lib/api'
+import { audit, sha256Hex } from '@/lib/audit'
 
 interface FileUploadProps {
   onUpload: (data: UploadResult, fileName: string) => void
@@ -23,6 +24,10 @@ export default function FileUpload({ onUpload }: FileUploadProps) {
     try {
       const data = await uploadDataset(file)
       onUpload(data, file.name)
+      audit(() => file.arrayBuffer().then(sha256Hex).then((hash) => ({
+        action: 'upload_data' as const, dataset_hash: hash,
+        details: { file_name: file.name.slice(0, 200), rows: data.rows, columns: data.columns.length },
+      })))
       setResult(data)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save the uploaded data in this browser. Check available storage and try again.')

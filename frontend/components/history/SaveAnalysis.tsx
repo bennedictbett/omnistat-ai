@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useAccount } from '@/components/accounts/AccountProvider'
 import { saveAnalysis } from '@/lib/history'
+import { analysisAuditFields, audit } from '@/lib/audit'
 import type { RRunResult } from '@/lib/rApi'
 
 export default function SaveAnalysis({ result }: { result: RRunResult }) {
@@ -22,6 +23,7 @@ function SaveForAccount({ result, userId }: { result: RRunResult; userId: string
     setError(null)
     try {
       await saveAnalysis(result, userId)
+      audit(() => analysisAuditFields(result).then((fields) => ({ ...fields, action: 'save_history' as const })))
       setStatus('saved')
     } catch (e) {
       setStatus('idle')

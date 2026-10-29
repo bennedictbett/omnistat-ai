@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { RApiError, RRunResult } from '@/lib/rApi'
 import { downloadBundle, fetchBundle } from '@/lib/reproducibilityBundle'
+import { analysisAuditFields, audit } from '@/lib/audit'
 
 export default function ReproducibilityBundle({
   result, rows,
@@ -20,6 +21,9 @@ export default function ReproducibilityBundle({
     setDownloaded(false)
     try {
       downloadBundle(await fetchBundle(result, rows))
+      audit(() => analysisAuditFields(result).then((fields) => ({
+        ...fields, action: 'export' as const, details: { ...fields.details, format: 'reproducibility_zip' },
+      })))
       setDownloaded(true)
     } catch (e) {
       setError(e instanceof RApiError ? e.message : 'Could not create the download. Your analysis is still available on screen.')
