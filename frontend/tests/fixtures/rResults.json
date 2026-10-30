@@ -143,6 +143,153 @@
    "outcome": "sbp"
   }
  },
+ "linear_regression": {
+  "duration_s": 2.359,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "adj_r_squared": 0.68536599816932,
+   "assumption_breusch_pagan_p": 0.237483267291152,
+   "assumption_shapiro_p_residuals": 0.40370251212852,
+   "coefficients": [
+    {
+     "ci_lwr": 7.62131456976129,
+     "ci_upr": 10.499561578511,
+     "estimate": 9.06043807413613,
+     "p_hc3": 1.26382822636523e-32,
+     "p_value": 2.01416980090426e-31,
+     "se": 0.732769085701836,
+     "se_hc3": 0.716669296396645,
+     "t": 12.3646565486018,
+     "term": "(Intercept)"
+    },
+    {
+     "ci_lwr": 0.429169235312508,
+     "ci_upr": 0.483369440757942,
+     "estimate": 0.456269338035225,
+     "p_hc3": 3.3702776337484e-141,
+     "p_value": 5.89534134947712e-137,
+     "se": 0.013798758365202,
+     "se_hc3": 0.0134569382435482,
+     "t": 33.0659705720953,
+     "term": "age"
+    },
+    {
+     "ci_lwr": 1.84070154026337,
+     "ci_upr": 2.48949018465436,
+     "estimate": 2.16509586245886,
+     "p_hc3": 3.93467680622255e-35,
+     "p_value": 1.13004613404507e-34,
+     "se": 0.165174239847691,
+     "se_hc3": 0.163887925603467,
+     "t": 13.1079511215267,
+     "term": "dose"
+    },
+    {
+     "ci_lwr": -2.26631444490228,
+     "ci_upr": -0.959558951920862,
+     "estimate": -1.61293669841157,
+     "p_hc3": 1.94345184536505e-06,
+     "p_value": 1.59122933167121e-06,
+     "se": 0.332685146520419,
+     "se_hc3": 0.335550177039802,
+     "t": -4.84823778663221,
+     "term": "armusual care"
+    }
+   ],
+   "df_model": 3,
+   "df_residual": 596,
+   "n_dropped_missing": 0,
+   "n_high_influence": 34,
+   "n_used": 600,
+   "p_value": 8.038535065242e-150,
+   "r_squared": 0.6869417945057,
+   "rmse": 4.06967562593042,
+   "statistic_F": 435.933108007772,
+   "test": "Linear regression (OLS); p-value is the overall F-test"
+  },
+  "test": "linear_regression",
+  "timed_out": false,
+  "title": "Linear regression (OLS)",
+  "variables": {
+   "outcome": "response",
+   "predictor_1": "age",
+   "predictor_2": "dose",
+   "predictor_3": "arm"
+  }
+ },
+ "logistic_regression": {
+  "duration_s": 1.063,
+  "error": null,
+  "ok": true,
+  "plots": [],
+  "results": {
+   "aic": 725.502458912948,
+   "assumption_hosmer_lemeshow_p": 0.45494295761516,
+   "auc": 0.692433993695993,
+   "coefficients": [
+    {
+     "estimate_log_odds": -0.839773148564049,
+     "odds_ratio": 0.431808468690326,
+     "or_lwr": 0.19782736690144,
+     "or_upr": 0.942531645409707,
+     "p_value": 0.0349814902606959,
+     "se": 0.39826617760791,
+     "term": "(Intercept)"
+    },
+    {
+     "estimate_log_odds": 0.0118605947870935,
+     "odds_ratio": 1.01193121054693,
+     "or_lwr": 0.997170453580214,
+     "or_upr": 1.02691046571066,
+     "p_value": 0.113646614855036,
+     "se": 0.00749715405831319,
+     "term": "age"
+    },
+    {
+     "estimate_log_odds": 0.610210006990838,
+     "odds_ratio": 1.8408179428286,
+     "or_lwr": 1.52686053106487,
+     "or_upr": 2.21933217192824,
+     "p_value": 1.5971692033891e-10,
+     "se": 0.095408038951813,
+     "term": "dose"
+    },
+    {
+     "estimate_log_odds": -0.815536868547981,
+     "odds_ratio": 0.442401752007465,
+     "or_lwr": 0.3097086363812,
+     "or_upr": 0.631946569092044,
+     "p_value": 7.37501928915707e-06,
+     "se": 0.181935199001413,
+     "term": "armusual care"
+    }
+   ],
+   "df": 3,
+   "event": "Yes",
+   "events_per_parameter": 73,
+   "mcfadden_r2": 0.0888730913865446,
+   "n_dropped_missing": 0,
+   "n_events": 219,
+   "n_used": 600,
+   "p_value": 4.29666017341723e-15,
+   "reference": "No",
+   "sensitivity_at_0.5": 0.351598173515982,
+   "specificity_at_0.5": 0.863517060367454,
+   "statistic_chi2": 69.9865858402541,
+   "test": "Logistic regression; odds ratios are per 1-unit increase for numeric predictors and versus the reference level for categorical ones; p-value is the overall likelihood-ratio test"
+  },
+  "test": "logistic_regression",
+  "timed_out": false,
+  "title": "Logistic regression",
+  "variables": {
+   "outcome": "outcome",
+   "predictor_1": "age",
+   "predictor_2": "dose",
+   "predictor_3": "arm"
+  }
+ },
  "mann_whitney_u": {
   "duration_s": 0.209,
   "error": null,
