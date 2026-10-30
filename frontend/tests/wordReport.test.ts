@@ -39,8 +39,12 @@ it.each([
   ['wilcoxon_signed_rank', /^V = 419\.00, p < \.001, rrb = \.80$/],
   ['kruskal_wallis', /^H\(2\) = 13\.14, p = \.001, ε2 = \.45$/],
   ['chi_square', /^χ2\(1\) = 0\.54, p = \.461, V = \.20$/],
+  ['linear_regression', 'F(3, 596) = 435.93, p < .001, R2 = .69, adjusted R2 = .69'],
+  ['logistic_regression', 'χ2(3) = 69.99, p < .001, McFadden R2 = .09, AUC = .69'],
 ])('writes the APA statement for real %s output', (test, expected) => {
-  expect(plain(apaStatement(results[test]))).toMatch(expected)
+  const statement = plain(apaStatement(results[test]))
+  if (typeof expected === 'string') expect(statement).toBe(expected)
+  else expect(statement).toMatch(expected)
 })
 
 it('marks APA symbols as italic and indices as sub/superscripts', () => {
@@ -67,6 +71,22 @@ it('builds APA tables with labels and adjusted p values', () => {
   expect(tukey.rows[0]).toEqual(['North-East', '−19.61', '[−29.93, −9.29]', '< .001'])
   expect(apaTables(results.mann_whitney_u)[0].columns).toEqual(['Group', 'n', 'Mdn', 'Q1', 'Q3'])
   expect(apaTables(results.chi_square)[0].title).toBe('Observed Counts')
+})
+
+it('builds coefficient tables from the real regression outputs', () => {
+  const linear = apaTables(results.linear_regression)[0]
+  expect(linear.title).toBe('Regression Coefficients')
+  expect(linear.columns).toEqual(['Term', 'b', 'SE', '95% CI', 't', 'p'])
+  expect(linear.rows.find((row) => row[0] === 'armusual care')).toEqual([
+    'armusual care', '−1.61', '0.33', '[−2.27, −0.96]', '−4.85', '< .001',
+  ])
+
+  const logistic = apaTables(results.logistic_regression)[0]
+  expect(logistic.title).toBe('Logistic Regression Odds Ratios')
+  expect(logistic.columns).toEqual(['Term', 'OR', '95% CI', 'p'])
+  expect(logistic.rows.find((row) => row[0] === 'armusual care')).toEqual([
+    'armusual care', '0.44', '[0.31, 0.63]', '< .001',
+  ])
 })
 
 it('validates chart images before embedding', () => {
@@ -105,6 +125,19 @@ it('creates a valid Word document with APA results, tables, methods, figures and
   expect(xml).toContain('w:vertAlign w:val="superscript"')
   expect(xml).toMatch(/<w:left w:val="none"/)
   expect(xml).not.toContain('<w:insideV w:val="single"')
+})
+
+it.each([
+  ['linear_regression', 'F(3, 596) = 435.93, p &lt; .001, R2 = .69, adjusted R2 = .69', 'Table 1Regression Coefficients'],
+  ['logistic_regression', 'χ2(3) = 69.99, p &lt; .001, McFadden R2 = .09, AUC = .69', 'Table 1Logistic Regression Odds Ratios'],
+])('includes the %s APA statement and coefficient table in the Word document', async (test, statement, table) => {
+  const { xml } = await documentXml(results[test])
+  const text = xml.replace(/<[^>]+>/g, '')
+  expect(text).toContain(statement)
+  expect(text).toContain(table)
+  expect(text).toContain('95% CI')
+  expect(xml).toContain('<w:i/>')
+  expect(xml).toContain('<w:vertAlign w:val="superscript"')
 })
 
 it('falls back to a results table for procedures without an APA statement and escapes text', async () => {
