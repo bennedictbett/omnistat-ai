@@ -244,10 +244,17 @@ results are not saved with them.
 
 Successful results for the independent and paired t-tests, one-way ANOVA,
 Pearson correlation, Shapiro-Wilk, Mann-Whitney U, Wilcoxon signed-rank,
-Kruskal-Wallis and chi-square tests start with a **Plain-English summary**. It
-describes group summaries, the direction and interval of the difference,
-statistical significance at the 0.05 level, effect size with conventional
-benchmarks, post-hoc comparisons below 0.05 and relevant assumption warnings.
+Kruskal-Wallis, chi-square, linear regression and logistic regression start with
+a **Plain-English summary**. Regression summaries describe overall model tests,
+R², adjusted R² or McFadden R², predictor estimates or odds ratios with 95%
+confidence intervals, and relevant diagnostic warnings. Categorical predictors
+are described relative to their reference level; logistic summaries identify
+the event and reference outcome.
+
+For example, a linear-regression summary describes the change in the outcome per
+unit increase in a predictor while holding other predictors constant. A logistic
+summary describes how many times as high the event odds are for a predictor
+change. These are associations, not evidence of causation.
 
 The summary is generated from fixed rules in the browser, not by AI, so it cannot
 invent numbers:
@@ -260,8 +267,10 @@ invent numbers:
 - Non-significant results are not described as showing no difference, and
   significance is not presented as clinical importance or causation.
 - Group codes are shown with SPSS/Stata value labels, for example “1” (Male).
+- Outcome, predictor and category labels can appear in explanations and reports;
+  review them for identifiers or other sensitive information before sharing.
 
-Tests explain real R outputs for all nine procedures (stored in
+Tests explain real R outputs for all eleven procedures (stored in
 `frontend/tests/fixtures/rResults.json`) and independently verify that every
 number matches its source field. Other procedures show the results without a
 summary. The printable report includes the same summary.
@@ -275,10 +284,14 @@ It contains:
 
 - an APA 7-style results statement, for example
   *t*(27.81) = −0.89, *p* = .382, *M*<sub>diff</sub> = −3.95, 95% CI [−13.08, 5.17], *d* = −0.32;
+- regression statements such as
+  *F*(3, 596) = 435.93, *p* < .001, *R*² = .69, adjusted *R*² = .69, or
+  *χ*²(3) = 69.99, *p* < .001, McFadden *R*² = .09, AUC = .69;
 - the plain-English summary and caveats;
 - numbered APA tables (horizontal rules only): group or paired descriptive
   statistics, Tukey HSD or Holm-adjusted pairwise comparisons, and observed
-  counts for chi-square, with value labels beside group codes;
+  counts for chi-square, regression coefficients or logistic odds ratios, with
+  value labels beside group codes;
 - the method (procedure, R version, columns, data SHA-256, rows used and
   excluded, declared assumptions);
 - numbered figures from the R charts; and
@@ -286,12 +299,14 @@ It contains:
 
 APA formatting uses italic statistic symbols, true minus signs, two decimals for
 statistics, exact *p* values to three decimals (`< .001` below that) and no
-leading zero for values that cannot exceed 1 (*p*, *r*, η², ε², *V*). Numbers are
-rounded copies of the result fields; tests check the statements against real R
-output for all nine procedures with plain-English summaries. Other procedures
-get a simple results table instead of an APA statement. Invalid chart images are
-replaced with a note rather than embedded. As with the printable report, the
-document is a snapshot to review with a statistician, not a signed attestation.
+leading zero for values bounded by 1 (*p*, *r*, R², AUC, η², ε², *V*). Numbers
+are rounded copies of the result fields; tests check statements and regression
+tables against real R output. Other procedures get a simple results table instead
+of an APA statement. Invalid chart images are replaced with a note rather than
+embedded. Reports are generated in the browser from the displayed result; they
+do not upload or rerun the analysis, but labels, tables and charts can reveal
+sensitive information. As with the printable report, the document is a snapshot
+to review with a statistician, not a signed attestation.
 
 ### Printable Analysis Report
 
@@ -652,7 +667,6 @@ the browser reaches them through Next.js proxies.
 Prioritised against the NexStat technical specification.
 
 ### Next
-- [ ] Plain-English summaries and APA statements for linear and logistic regression
 - [ ] Golden test datasets with reference outputs for every procedure
 - [ ] Basic maps: offline tiles, boundaries, choropleth and heatmaps
 
