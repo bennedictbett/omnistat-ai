@@ -86,6 +86,14 @@ export function apaStatement(result: RRunResult): ApaRun[] | null {
       case 'chi_square':
         return [sym('χ'), sup('2'), txt(`(${apaDf(get(r, 'df'))}) = ${apaNumber(get(r, 'statistic_chi2'))}`), ...p(),
           txt(', '), sym('V'), txt(` = ${apaNumber(get(r, 'cramers_v'), 2, true)}`)]
+      case 'linear_regression':
+        return [sym('F'), txt(`(${apaDf(get(r, 'df_model'))}, ${apaDf(get(r, 'df_residual'))}) = ${apaNumber(get(r, 'statistic_F'))}`), ...p(),
+          txt(', '), sym('R'), sup('2'), txt(` = ${apaNumber(get(r, 'r_squared'), 2, true)}`),
+          txt(', adjusted '), sym('R'), sup('2'), txt(` = ${apaNumber(get(r, 'adj_r_squared'), 2, true)}`)]
+      case 'logistic_regression':
+        return [sym('χ'), sup('2'), txt(`(${apaDf(get(r, 'df'))}) = ${apaNumber(get(r, 'statistic_chi2'))}`), ...p(),
+          txt(', McFadden '), sym('R'), sup('2'), txt(` = ${apaNumber(get(r, 'mcfadden_r2'), 2, true)}`),
+          txt(', AUC = '), txt(apaNumber(get(r, 'auc'), 2, true))]
       default:
         return null
     }
@@ -113,12 +121,47 @@ const cell = (v: unknown, decimals = 2, bounded = false): string =>
 const pCell = (v: unknown): string =>
   typeof v === 'number' && Number.isFinite(v) ? (v < 0.001 ? '< .001' : apaNumber(v, 3, true)) : '—'
 
+function regressionCoefficientTable(r: Record<string, unknown>, test: string): ApaTable | null {
+  const rows = tableRows(r, 'coefficients')
+  if (!rows || rows.length < 2 || rows.filter((row) => row.term === '(Intercept)').length !== 1) return null
+  const linear = test === 'linear_regression'
+  const required = linear ? ['estimate', 'se', 'ci_lwr', 'ci_upr', 't', 'p_value'] : ['odds_ratio', 'or_lwr', 'or_upr', 'p_value']
+  if (!rows.every((row) => typeof row.term === 'string' && row.term.length > 0 && required.every((key) =>
+    typeof row[key] === 'number' && Number.isFinite(row[key]))) || !rows.every((row) => {
+    const p = row.p_value as number
+    return p >= 0 && p <= 1
+  })) return null
+
+  if (linear) {
+    if (!rows.every((row) => (row.se as number) >= 0 && (row.ci_lwr as number) <= (row.ci_upr as number))) return null
+    return {
+      title: 'Regression Coefficients',
+      columns: ['Term', 'b', 'SE', '95% CI', 't', 'p'],
+      rows: rows.map((row) => [String(row.term), cell(row.estimate), cell(row.se),
+        `[${cell(row.ci_lwr)}, ${cell(row.ci_upr)}]`, cell(row.t), pCell(row.p_value)]),
+    }
+  }
+
+  if (!rows.every((row) => (row.odds_ratio as number) > 0 && (row.or_lwr as number) > 0 &&
+    (row.or_lwr as number) <= (row.or_upr as number))) return null
+  return {
+    title: 'Logistic Regression Odds Ratios',
+    columns: ['Term', 'OR', '95% CI', 'p'],
+    rows: rows.map((row) => [String(row.term), cell(row.odds_ratio),
+      `[${cell(row.or_lwr)}, ${cell(row.or_upr)}]`, pCell(row.p_value)]),
+  }
+}
+
 /** APA tables for group summaries and post-hoc comparisons; values are rounded copies of the result fields. */
 export function apaTables(result: RRunResult, valueLabels: Record<string, string> = {}): ApaTable[] {
   if (!result.ok || !isRecord(result.results)) return []
   const r = result.results
   const tables: ApaTable[] = []
   const label = (g: unknown) => (valueLabels[String(g)] ? `${String(g)} (${valueLabels[String(g)]})` : String(g))
+  if (result.test === 'linear_regression' || result.test === 'logistic_regression') {
+    const coefficients = regressionCoefficientTable(r, result.test)
+    return coefficients ? [coefficients] : []
+  }
   const groups = tableRows(r, 'groups')
   if (groups && 'mean' in groups[0]) {
     tables.push({ title: `Descriptive Statistics for ${result.variables.outcome ?? 'Outcome'} by Group`,
