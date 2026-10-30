@@ -60,9 +60,19 @@ class Builder {
     return [constant('95%'), ' CI ', this.num(`${path}[0]`), ' to ', this.num(`${path}[1]`)]
   }
 
-  rows(key: string, columns: string[]): Record<string, unknown>[] {
+  ciFields(lowerPath: string, upperPath: string): ExplanationPart[] {
+    if (this.raw(lowerPath) > this.raw(upperPath)) throw new Missing(lowerPath)
+    return [constant('95%'), ' CI ', this.num(lowerPath), ' to ', this.num(upperPath)]
+  }
+
+  records(key: string): Record<string, unknown>[] {
     const rows = this.results[key]
     if (!Array.isArray(rows) || rows.length === 0 || !rows.every(isRecord)) throw new Missing(key)
+    return rows
+  }
+
+  rows(key: string, columns: string[]): Record<string, unknown>[] {
+    const rows = this.records(key)
     rows.forEach((_, i) => columns.forEach((c) => this.raw(`${key}[${i}].${c}`)))
     if (!rows.every((r) => typeof r.group === 'string' || typeof r.variable === 'string' || typeof r.comparison === 'string')) {
       throw new Missing(key)
@@ -81,6 +91,49 @@ const alpha = () => constant('0.05')
 
 function significance(b: Builder, path: string): boolean {
   return b.raw(path) < ALPHA
+}
+
+function probability(b: Builder, path: string): number {
+  const value = b.raw(path)
+  if (value < 0 || value > 1) throw new Missing(path)
+  return value
+}
+
+function wholeNumber(b: Builder, path: string, minimum: number): number {
+  const value = b.raw(path)
+  if (!Number.isInteger(value) || value < minimum) throw new Missing(path)
+  return value
+}
+
+function coefficientRows(b: Builder, key: string, fields: string[]): Record<string, unknown>[] {
+  const rows = b.records(key)
+  const terms = new Set<string>()
+  let intercepts = 0
+  rows.forEach((row, i) => {
+    if (typeof row.term !== 'string' || row.term.length === 0 || terms.has(row.term)) throw new Missing(`${key}[${i}].term`)
+    terms.add(row.term)
+    if (row.term === '(Intercept)') intercepts++
+    fields.forEach((field) => b.raw(`${key}[${i}].${field}`))
+  })
+  if (intercepts !== 1 || rows.length < 2) throw new Missing(key)
+  return rows
+}
+
+function coefficientPredictor(term: string, variables: Record<string, string>): { predictor: string; level: string | null } {
+  const predictors = Object.entries(variables)
+    .filter(([role]) => /^predictor_\d+$/.test(role))
+    .map(([, name]) => name)
+    .sort((a, b) => b.length - a.length)
+  const exact = predictors.find((name) => name === term)
+  if (exact) return { predictor: exact, level: null }
+  const categorical = predictors.find((name) => term.startsWith(name) && term.length > name.length)
+  return categorical ? { predictor: categorical, level: term.slice(categorical.length) } : { predictor: term, level: null }
+}
+
+function nullableProbability(result: RRunResult, b: Builder, path: string): number | null {
+  const value = result.results[path]
+  if (value === undefined || value === null) return null
+  return probability(b, path)
 }
 
 function magnitude(value: number, cuts: [number, number, number]): string {
@@ -270,6 +323,126 @@ export function explainResult(
         }
         break
       }
+      case 'linear_regression': {
+        wholeNumber(b, 'n_used', 1)
+        wholeNumber(b, 'n_dropped_missing', 0)
+        if (b.raw('df_model') <= 0 || b.raw('df_residual') <= 0 || b.raw('statistic_F') < 0) throw new Missing('model statistics')
+        probability(b, 'p_value')
+        if (b.raw('r_squared') < 0 || b.raw('r_squared') > 1) throw new Missing('r_squared')
+        probability(b, 'assumption_breusch_pagan_p')
+        wholeNumber(b, 'n_high_influence', 0)
+        const coefficients = coefficientRows(b, 'coefficients', ['estimate', 'ci_lwr', 'ci_upr', 'p_value'])
+        coefficients.forEach((_, i) => {
+          if (b.raw(`coefficients[${i}].ci_lwr`) > b.raw(`coefficients[${i}].ci_upr`)) throw new Missing(`coefficients[${i}]`)
+          probability(b, `coefficients[${i}].p_value`)
+        })
+        const shapiro = nullableProbability(result, b, 'assumption_shapiro_p_residuals')
+        const vifValue = result.results.vif
+        let vif: Record<string, unknown>[] = []
+        if (vifValue !== undefined && vifValue !== null) {
+          if (!Array.isArray(vifValue) || !vifValue.every(isRecord)) throw new Missing('vif')
+          vif = vifValue
+          vif.forEach((row, i) => {
+            if (typeof row.term !== 'string' || b.raw(`vif[${i}].vif`) < 1) throw new Missing(`vif[${i}]`)
+          })
+        }
+        const sig = significance(b, 'p_value')
+        paragraphs.push([
+          `The linear regression model ${sig ? 'found' : 'did not find'} a statistically significant association at the `, alpha(),
+          ' level (F(', b.num('df_model'), ', ', b.num('df_residual'), ') = ', b.num('statistic_F'), ', p ', b.p('p_value'),
+          '). R² was ', b.num('r_squared'), ' and adjusted R² was ', b.num('adj_r_squared'), '. It used ', b.num('n_used'),
+          ' observations and excluded ', b.num('n_dropped_missing'), ' for missing values.',
+        ])
+        coefficients.forEach((row, i) => {
+          if (row.term === '(Intercept)') return
+          const term = String(row.term)
+          const { predictor, level } = coefficientPredictor(term, v)
+          const label = level === null ? predictor : (valueLabels[predictor]?.[level] ?? level)
+          paragraphs.push([
+            level === null ? `Each unit increase in ${predictor} was associated with a change of `
+              : `Compared with the reference level of ${predictor}, ${label} was associated with a change of `,
+            b.num(`coefficients[${i}].estimate`), ` in ${v.outcome}, holding other predictors constant (`,
+            ...b.ciFields(`coefficients[${i}].ci_lwr`, `coefficients[${i}].ci_upr`), ', p ',
+            b.p(`coefficients[${i}].p_value`), ').',
+          ])
+        })
+        if (shapiro !== null && shapiro < ALPHA) {
+          caveats.push(['Residuals may not be normally distributed (Shapiro-Wilk p ', b.p('assumption_shapiro_p_residuals'), ').'])
+        }
+        if (b.raw('assumption_breusch_pagan_p') < ALPHA) {
+          caveats.push(['Residual variance may not be constant (Breusch-Pagan p ', b.p('assumption_breusch_pagan_p'),
+            '); the reported heteroscedasticity-consistent, leverage-adjusted robust standard errors can help assess sensitivity.'])
+        }
+        if (b.raw('n_high_influence') > 0) {
+          caveats.push([b.num('n_high_influence'), ' high-influence observation(s) were flagged; inspect them rather than removing them automatically.'])
+        }
+        vif.forEach((row, i) => {
+          if (b.raw(`vif[${i}].vif`) > 5) {
+            caveats.push([`Variance inflation for ${String(row.term)} exceeds the conventional threshold (VIF `,
+              b.num(`vif[${i}].vif`), ').'])
+          }
+        })
+        caveats.push(['These are associations, not evidence of causation; statistical significance does not by itself establish clinical importance.'])
+        break
+      }
+      case 'logistic_regression': {
+        if (typeof result.results.event !== 'string' || result.results.event.length === 0 ||
+          typeof result.results.reference !== 'string' || result.results.reference.length === 0 || result.results.event === result.results.reference) {
+          throw new Missing('event or reference')
+        }
+        const nUsed = wholeNumber(b, 'n_used', 1)
+        wholeNumber(b, 'n_dropped_missing', 0)
+        const nEvents = wholeNumber(b, 'n_events', 1)
+        if (nEvents >= nUsed || b.raw('statistic_chi2') < 0 || b.raw('df') <= 0 || b.raw('events_per_parameter') <= 0) {
+          throw new Missing('model statistics')
+        }
+        probability(b, 'p_value')
+        probability(b, 'auc')
+        if (b.raw('mcfadden_r2') < 0 || b.raw('mcfadden_r2') > 1) throw new Missing('mcfadden_r2')
+        const coefficients = coefficientRows(b, 'coefficients', ['odds_ratio', 'or_lwr', 'or_upr', 'p_value'])
+        coefficients.forEach((_, i) => {
+          if (b.raw(`coefficients[${i}].odds_ratio`) <= 0 || b.raw(`coefficients[${i}].or_lwr`) <= 0 ||
+            b.raw(`coefficients[${i}].or_lwr`) > b.raw(`coefficients[${i}].or_upr`)) throw new Missing(`coefficients[${i}]`)
+          probability(b, `coefficients[${i}].p_value`)
+        })
+        const hosmer = nullableProbability(result, b, 'assumption_hosmer_lemeshow_p')
+        const warningValue = result.results.model_warnings
+        if (warningValue !== undefined && warningValue !== null &&
+          (!Array.isArray(warningValue) || !warningValue.every((warning) => typeof warning === 'string'))) throw new Missing('model_warnings')
+        const event = valueLabels[v.outcome ?? '']?.[result.results.event] ?? result.results.event
+        const reference = valueLabels[v.outcome ?? '']?.[result.results.reference] ?? result.results.reference
+        const sig = significance(b, 'p_value')
+        paragraphs.push([
+          `The logistic regression likelihood-ratio test ${sig ? 'found' : 'did not find'} a statistically significant association at the `,
+          alpha(), ' level (χ²(', b.num('df'), ') = ', b.num('statistic_chi2'), ', p ', b.p('p_value'),
+          '). The event was ', event, ' and the reference outcome was ', reference, '. McFadden R² was ', b.num('mcfadden_r2'),
+          '. The AUC was ', b.num('auc'), ', indicating the model\'s ability to discriminate between the two outcomes.',
+        ])
+        coefficients.forEach((row, i) => {
+          if (row.term === '(Intercept)') return
+          const { predictor, level } = coefficientPredictor(String(row.term), v)
+          const levelLabel = level === null ? null : (valueLabels[predictor]?.[level] ?? level)
+          const comparison = levelLabel === null
+            ? `For each unit increase in ${predictor}, the odds of ${event} are `
+            : `Compared with the reference level of ${predictor}, the odds of ${event} for ${levelLabel} are `
+          paragraphs.push([
+            comparison, b.num(`coefficients[${i}].odds_ratio`), ' times as high, holding other predictors constant (',
+            ...b.ciFields(`coefficients[${i}].or_lwr`, `coefficients[${i}].or_upr`), ', p ',
+            b.p(`coefficients[${i}].p_value`), ').',
+          ])
+        })
+        if (b.raw('events_per_parameter') < 10) {
+          caveats.push(['There are fewer events per parameter than recommended, so estimates may be unstable.'])
+        }
+        if (hosmer !== null && hosmer < ALPHA) {
+          caveats.push(['The Hosmer-Lemeshow test may indicate poor model calibration (p ', b.p('assumption_hosmer_lemeshow_p'), ').'])
+        }
+        if (Array.isArray(warningValue) && warningValue.length > 0) {
+          caveats.push(['The model reported one or more warnings; review them in the results.'])
+        }
+        caveats.push(['These are associations, not evidence of causation; statistical significance does not by itself establish clinical importance.'])
+        break
+      }
       default:
         return null
     }
@@ -281,7 +454,7 @@ export function explainResult(
   if (!covered.includes(result.test) && b.raw('p_value') >= ALPHA) {
     caveats.push(['A non-significant result does not show that there is no difference or association; it may reflect limited data.'])
   }
-  if (result.test !== 'shapiro_wilk') caveats.push([GENERAL])
+  if (!['shapiro_wilk', 'linear_regression', 'logistic_regression'].includes(result.test)) caveats.push([GENERAL])
   return { paragraphs, caveats }
 }
 
