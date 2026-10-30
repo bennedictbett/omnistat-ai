@@ -51,7 +51,7 @@ describe.each(Object.keys(results))('%s explanation from real R output', (test) 
 
   it('uses caveats appropriate to the procedure', () => {
     const caveats = explainResult(result)!.caveats.map(explanationText).join('\n')
-    expect(caveats.includes('clinical importance or causation')).toBe(test !== 'shapiro_wilk')
+    expect(caveats.includes('clinical importance')).toBe(test !== 'shapiro_wilk')
     if (['chi_square', 'mann_whitney_u', 'kruskal_wallis', 'pearson_correlation', 'wilcoxon_signed_rank'].includes(test)) {
       expect(caveats.includes('does not show that there is no difference or association'))
         .toBe((result.results.p_value as number) >= 0.05)
@@ -99,6 +99,79 @@ it('refuses to explain incomplete, invalid or unsupported results', () => {
   expect(explainResult({ ...t, results: { ...t.results, cohens_d: '0.5' } })).toBeNull()
   expect(explainResult({ ...t, ok: false })).toBeNull()
   expect(explainResult({ ...t, test: 'logistic_regression' })).toBeNull()
+})
+
+it('explains linear regression results and uses labels for categorical predictors', () => {
+  const result = results.linear_regression
+  const explanation = explainResult(result, { arm: { 'usual care': 'Usual care' } })!
+  const text = explanation.paragraphs.map(explanationText).join('\n')
+  const r = result.results
+  expect(text).toContain(`F(${formatNumber(r.df_model as number)}, ${formatNumber(r.df_residual as number)}) = ${formatNumber(r.statistic_F as number)}`)
+  expect(text).toContain(`R² was ${formatNumber(r.r_squared as number)} and adjusted R² was ${formatNumber(r.adj_r_squared as number)}`)
+  expect(text).toContain(`used ${formatNumber(r.n_used as number)} observations and excluded ${formatNumber(r.n_dropped_missing as number)}`)
+  expect(text).toContain('Each unit increase in age was associated with a change of')
+  expect(text).toContain('Compared with the reference level of arm, Usual care was associated with a change of')
+  expect(explanation.caveats.map(explanationText).join('\n')).toContain('high-influence observation(s) were flagged')
+  expect(explanation.caveats.map(explanationText).join('\n')).toContain('associations, not evidence of causation')
+})
+
+it('explains logistic odds against labeled event and reference outcomes', () => {
+  const result = results.logistic_regression
+  const explanation = explainResult(result, {
+    outcome: { Yes: 'Recovered', No: 'Not recovered' },
+    arm: { 'usual care': 'Usual care' },
+  })!
+  const text = explanation.paragraphs.map(explanationText).join('\n')
+  expect(text).toContain('The event was Recovered and the reference outcome was Not recovered')
+  expect(text).toContain('discriminate between the two outcomes')
+  expect(text).toContain('For each unit increase in dose, the odds of Recovered are')
+  expect(text).toContain('Compared with the reference level of arm, the odds of Recovered for Usual care are')
+})
+
+it('adds regression diagnostic caveats only when reported thresholds are crossed', () => {
+  const linear = results.linear_regression
+  const linearExplanation = explainResult({
+    ...linear,
+    results: {
+      ...linear.results,
+      assumption_shapiro_p_residuals: 0.01,
+      assumption_breusch_pagan_p: 0.02,
+      vif: [{ term: 'age', vif: 6 }],
+    },
+  })!
+  const linearCaveats = linearExplanation.caveats.map(explanationText).join('\n')
+  expect(linearCaveats).toContain('Shapiro-Wilk')
+  expect(linearCaveats).toContain('Breusch-Pagan')
+  expect(linearCaveats).toContain('leverage-adjusted robust standard errors')
+  expect(staticText(linearExplanation)).not.toMatch(/\d/)
+  expect(linearCaveats).toContain('Variance inflation for age')
+
+  const logistic = results.logistic_regression
+  const logisticExplanation = explainResult({
+    ...logistic,
+    results: {
+      ...logistic.results,
+      events_per_parameter: 9,
+      assumption_hosmer_lemeshow_p: 0.01,
+      model_warnings: ['Model warning'],
+    },
+  })!
+  const logisticCaveats = logisticExplanation.caveats.map(explanationText).join('\n')
+  expect(logisticCaveats).toContain('fewer events per parameter than recommended')
+  expect(logisticCaveats).toContain('Hosmer-Lemeshow')
+  expect(logisticCaveats).toContain('one or more warnings')
+  expect(staticText(logisticExplanation)).not.toMatch(/\d/)
+})
+
+it('withholds regression summaries for missing or invalid required fields', () => {
+  const linear = results.linear_regression
+  expect(explainResult({ ...linear, results: { ...linear.results, p_value: 1.1 } })).toBeNull()
+  expect(explainResult({ ...linear, results: { ...linear.results, coefficients: [] } })).toBeNull()
+
+  const logistic = results.logistic_regression
+  expect(explainResult({ ...logistic, results: { ...logistic.results, reference: undefined } })).toBeNull()
+  expect(explainResult({ ...logistic, results: { ...logistic.results, auc: null } })).toBeNull()
+  expect(explainResult({ ...logistic, results: { ...logistic.results, coefficients: [] } })).toBeNull()
 })
 
 it('renders source-linked numbers and an unavailable message', () => {
