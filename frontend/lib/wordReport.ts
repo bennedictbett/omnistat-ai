@@ -5,7 +5,7 @@ import { formatNumber, isPKey, prettyKey, RRunResult } from './rApi'
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 const MAX_FIGURE_WIDTH = 600
-const ITALIC_HEADERS = new Set(['n', 'M', 'SD', 'Mdn', 'Q1', 'Q3', 'Mdiff', 'padj'])
+const ITALIC_HEADERS = new Set(['n', 'M', 'SD', 'Mdn', 'Q1', 'Q3', 'Mdiff', 'padj', 'b', 'SE', 't', 'p', 'OR'])
 
 export function decodePng(b64: string): { data: Uint8Array; width: number; height: number } | null {
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null
