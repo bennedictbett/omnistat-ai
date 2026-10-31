@@ -2,7 +2,7 @@
   "source_r_version": "R version 4.5.2 (2025-10-31 ucrt)",
   "cases": {
     "independent_t_test": {
-      "data_sha256": "60777568836be215269e3e8070d5525d25713e7bf9b1b313f61bd66f83c5e7a8",
+      "data_sha256": "9cc9a8f45ac2871f687b7024591a2e3fe7bafcb6336921a7fad8d492ab90377b",
       "expected": {
         "statistic_t": 0.743681503459731,
         "df": 13.4968349456056,
@@ -13,7 +13,7 @@
       }
     },
     "mann_whitney_u": {
-      "data_sha256": "60777568836be215269e3e8070d5525d25713e7bf9b1b313f61bd66f83c5e7a8",
+      "data_sha256": "9cc9a8f45ac2871f687b7024591a2e3fe7bafcb6336921a7fad8d492ab90377b",
       "expected": {
         "statistic_W": 39,
         "p_value": 0.494200853413607,
@@ -22,7 +22,7 @@
       }
     },
     "paired_t_test": {
-      "data_sha256": "7d79bece2f4c30b0c54c253929fca2d3bba59a63f429fa1c112cb84c3e2ba0ac",
+      "data_sha256": "49e0ecff4a0f5b58d80ffb4817e8db35222dc4aec673cc9821acd20d444eb649",
       "expected": {
         "statistic_t": 6.63421611812441,
         "df": 11,
@@ -33,7 +33,7 @@
       }
     },
     "wilcoxon_signed_rank": {
-      "data_sha256": "7d79bece2f4c30b0c54c253929fca2d3bba59a63f429fa1c112cb84c3e2ba0ac",
+      "data_sha256": "49e0ecff4a0f5b58d80ffb4817e8db35222dc4aec673cc9821acd20d444eb649",
       "expected": {
         "statistic_V": 78,
         "p_value": 0.00048828125,
@@ -44,7 +44,7 @@
       }
     },
     "one_way_anova": {
-      "data_sha256": "e57b8b21f1d1a471a542b75e5d9c8cc2d5ab3f5958a6363c5a0e327de3312c2a",
+      "data_sha256": "cfd395cb23249afaf9ef3dc937b72781f1c6b02e8b282557b4bebd77e97fa36c",
       "expected": {
         "F": 16.8280504398153,
         "df_between": 2,
@@ -54,7 +54,7 @@
       }
     },
     "kruskal_wallis": {
-      "data_sha256": "e57b8b21f1d1a471a542b75e5d9c8cc2d5ab3f5958a6363c5a0e327de3312c2a",
+      "data_sha256": "cfd395cb23249afaf9ef3dc937b72781f1c6b02e8b282557b4bebd77e97fa36c",
       "expected": {
         "statistic_H": 14.64,
         "df": 2,
@@ -63,7 +63,7 @@
       }
     },
     "chi_square": {
-      "data_sha256": "595b0dba77cc0941ae855e835eaa226c25054d3addee3e4755ac73d72f88968e",
+      "data_sha256": "87a507309d92187d9ea652efdfad2e08934d8dec522a3da9e9420d78299efa74",
       "expected": {
         "statistic_chi2": 5.49773755656109,
         "df": 1,
@@ -72,7 +72,7 @@
       }
     },
     "pearson_correlation": {
-      "data_sha256": "338cae85024562a081b61e1721496bf09a1a40736f9d660b29e02338a8437563",
+      "data_sha256": "af091fc3a7f4a6a02a0985defea6ba967d484b401ce53bf05ddb40c8b6b55b04",
       "expected": {
         "r": 0.997157169325191,
         "p_value": 1.45528047547666e-12,
@@ -83,7 +83,7 @@
       }
     },
     "shapiro_wilk": {
-      "data_sha256": "8d24a3130e18bd27490faf33307d901b64e19e9bdcac2dce41ceaf11f62f54ff",
+      "data_sha256": "051c7e1d953c41c1233a5008f5c13244542440e1c3ed2eb039d9a6749b0da0b8",
       "expected": {
         "W": 0.986427082733111,
         "p_value": 0.9980803870681,
@@ -91,7 +91,7 @@
       }
     },
     "linear_regression": {
-      "data_sha256": "c9c5b0089a9d7870c45b11363bd9db83109cf7946d2a60e1d7a33be2f19418e7",
+      "data_sha256": "7ccae825176c7c710b74506071c9526259f44be7b50786d0b150a47be6ced066",
       "expected": {
         "statistic_F": 447.044827251564,
         "df_model": 3,
@@ -108,7 +108,7 @@
       }
     },
     "logistic_regression": {
-      "data_sha256": "c05ace5a9dd45d24eec47fbce2d01f6184d96bc913f4bd6f2ffe42630fd4c2c3",
+      "data_sha256": "6478878917e127a976f947169e092f49766b30347283071764676ba24d77fd12",
       "expected": {
         "statistic_chi2": 64.3528294808242,
         "df": 3,
@@ -126,7 +126,7 @@
       }
     },
     "dose_response_4pl": {
-      "data_sha256": "5e928d4339c60d3bbae600ff519d7453b748f33f3e3076edbdbfcd814657cc9e",
+      "data_sha256": "097e5862115931925edb0f27d2bff282ca80975419943164c7b7a203da172fbc",
       "expected": {
         "ec50": 0.00000100003503770129,
         "hill_slope": 1.09918564356966,
@@ -141,7 +141,7 @@
       }
     },
     "michaelis_menten": {
-      "data_sha256": "a7ee5ead9645fcb65e32a3a1c931305bde7f56f516e5913dd45e853aa127940b",
+      "data_sha256": "e772d15ac9d46d2b5ef1c768618950f06f699b39501e9a509ec2712f56b89218",
       "expected": {
         "r_squared": 0.999820234510311,
         "n": 8,
