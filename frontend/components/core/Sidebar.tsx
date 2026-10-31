@@ -1,6 +1,6 @@
 'use client'
 
-import { Brain, FolderOpen, Upload, BarChart2, Activity, Database, FileText, ChartScatter, Compass } from 'lucide-react'
+import { Brain, FolderOpen, Upload, BarChart2, Activity, Database, FileText, ChartScatter, Compass, Map as MapIcon } from 'lucide-react'
 
 const tabs = [
   { id: 'jarvis', label: 'Jarvis AI', icon: Brain },
@@ -13,6 +13,7 @@ const tabs = [
   { id: 'history', label: 'History', icon: FileText },
   { id: 'descriptive', label: 'Descriptive Stats', icon: BarChart2 },
   { id: 'charts', label: 'Chart Studio', icon: ChartScatter },
+  { id: 'maps', label: 'Maps', icon: MapIcon },
 
 ]
 
