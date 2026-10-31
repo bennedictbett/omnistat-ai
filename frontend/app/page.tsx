@@ -28,6 +28,7 @@ const NormalityTest = dynamic(() => import('@/components/analytics/NormalityTest
 const SurvivalCurve = dynamic(() => import('@/components/analytics/SurvivalCurve'), { ssr: false })
 const DescriptiveStats = dynamic(() => import('@/components/analytics/DescriptiveStats'), { ssr: false })
 const ChartStudio = dynamic(() => import('@/components/charts/ChartStudio'), { ssr: false })
+const MapStudio = dynamic(() => import('@/components/maps/MapStudio'), { ssr: false })
 const TestWizard = dynamic(() => import('@/components/analytics/TestWizard'), { ssr: false })
 const DatasetProjects = dynamic(() => import('@/components/data/DatasetProjects'), { ssr: false })
 const AnalysisHistory = dynamic(() => import('@/components/history/AnalysisHistory'), { ssr: false })
@@ -83,6 +84,7 @@ export default function Home() {
           {activeTab === 'survival' && <SurvivalCurve />}
           {activeTab === 'descriptive' && <DescriptiveStats />}
           {activeTab === 'charts' && <ChartStudio data={uploadedData} />}
+          {activeTab === 'maps' && <MapStudio data={uploadedData} />}
           {activeTab === 'wizard' && <TestWizard />}
           {activeTab === 'history' && <AnalysisHistory />}
         </main>
