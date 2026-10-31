@@ -1,0 +1,155 @@
+{
+  "source_r_version": "R version 4.5.2 (2025-10-31 ucrt)",
+  "cases": {
+    "independent_t_test": {
+      "data_sha256": "60777568836be215269e3e8070d5525d25713e7bf9b1b313f61bd66f83c5e7a8",
+      "expected": {
+        "statistic_t": 0.743681503459731,
+        "df": 13.4968349456056,
+        "p_value": 0.469818376602104,
+        "mean_difference": 1.625,
+        "ci_95": [-3.07796439614077, 6.32796439614077],
+        "cohens_d": 0.371840751729865
+      }
+    },
+    "mann_whitney_u": {
+      "data_sha256": "60777568836be215269e3e8070d5525d25713e7bf9b1b313f61bd66f83c5e7a8",
+      "expected": {
+        "statistic_W": 39,
+        "p_value": 0.494200853413607,
+        "rank_biserial_r": 0.21875,
+        "location_shift_ci_95": [-3.50006343350179, 6.99995155346248]
+      }
+    },
+    "paired_t_test": {
+      "data_sha256": "7d79bece2f4c30b0c54c253929fca2d3bba59a63f429fa1c112cb84c3e2ba0ac",
+      "expected": {
+        "statistic_t": 6.63421611812441,
+        "df": 11,
+        "p_value": 0.0000368895463973513,
+        "mean_difference": 2.18333333333333,
+        "ci_95": [1.45898486764623, 2.90768179902044],
+        "cohens_dz": 1.91513323083064
+      }
+    },
+    "wilcoxon_signed_rank": {
+      "data_sha256": "7d79bece2f4c30b0c54c253929fca2d3bba59a63f429fa1c112cb84c3e2ba0ac",
+      "expected": {
+        "statistic_V": 78,
+        "p_value": 0.00048828125,
+        "median_difference": 1.95,
+        "hodges_lehmann_shift": 2.125,
+        "shift_ci_95": [1.4, 2.95],
+        "rank_biserial_r": 1
+      }
+    },
+    "one_way_anova": {
+      "data_sha256": "e57b8b21f1d1a471a542b75e5d9c8cc2d5ab3f5958a6363c5a0e327de3312c2a",
+      "expected": {
+        "F": 16.8280504398153,
+        "df_between": 2,
+        "df_within": 21,
+        "p_value": 0.0000434607092057864,
+        "eta_squared": 0.615779397687946
+      }
+    },
+    "kruskal_wallis": {
+      "data_sha256": "e57b8b21f1d1a471a542b75e5d9c8cc2d5ab3f5958a6363c5a0e327de3312c2a",
+      "expected": {
+        "statistic_H": 14.64,
+        "df": 2,
+        "p_value": 0.000662162211212276,
+        "epsilon_squared": 0.636521739130435
+      }
+    },
+    "chi_square": {
+      "data_sha256": "595b0dba77cc0941ae855e835eaa226c25054d3addee3e4755ac73d72f88968e",
+      "expected": {
+        "statistic_chi2": 5.49773755656109,
+        "df": 1,
+        "p_value": 0.0190410936110851,
+        "cramers_v": 0.336336396998156
+      }
+    },
+    "pearson_correlation": {
+      "data_sha256": "338cae85024562a081b61e1721496bf09a1a40736f9d660b29e02338a8437563",
+      "expected": {
+        "r": 0.997157169325191,
+        "p_value": 1.45528047547666e-12,
+        "ci_95": [0.989539342654442, 0.999229569051471],
+        "spearman_rho": 1,
+        "spearman_p_value": 0,
+        "n": 12
+      }
+    },
+    "shapiro_wilk": {
+      "data_sha256": "8d24a3130e18bd27490faf33307d901b64e19e9bdcac2dce41ceaf11f62f54ff",
+      "expected": {
+        "W": 0.986427082733111,
+        "p_value": 0.9980803870681,
+        "n": 12
+      }
+    },
+    "linear_regression": {
+      "data_sha256": "c9c5b0089a9d7870c45b11363bd9db83109cf7946d2a60e1d7a33be2f19418e7",
+      "expected": {
+        "statistic_F": 447.044827251564,
+        "df_model": 3,
+        "df_residual": 76,
+        "p_value": 3.5664592731687e-48,
+        "r_squared": 0.946370650789686,
+        "adj_r_squared": 0.944253702794542,
+        "coefficients": [
+          {"term": "(Intercept)", "estimate": 3.92959116899492, "se_hc3": 0.131356089562071, "p_value": 6.01074969526604e-48},
+          {"term": "x1", "estimate": 1.6388945104445, "se_hc3": 0.0778680542598061, "p_value": 1.57600058131251e-33},
+          {"term": "x2", "estimate": -2.02508807644441, "se_hc3": 0.0784964613925744, "p_value": 2.55102801434425e-42},
+          {"term": "armtreatment", "estimate": 1.21928085421474, "se_hc3": 0.163273325885266, "p_value": 2.97228632625978e-11}
+        ]
+      }
+    },
+    "logistic_regression": {
+      "data_sha256": "c05ace5a9dd45d24eec47fbce2d01f6184d96bc913f4bd6f2ffe42630fd4c2c3",
+      "expected": {
+        "statistic_chi2": 64.3528294808242,
+        "df": 3,
+        "p_value": 6.89894152532717e-14,
+        "mcfadden_r2": 0.0936308375194842,
+        "auc": 0.701040941542148,
+        "n_events": 223,
+        "events_per_parameter": 74.3333333333333,
+        "coefficients": [
+          {"term": "(Intercept)", "odds_ratio": 0.570114086446726, "or_lwr": 0.433026867173085, "or_upr": 0.75060024262898, "p_value": 0.0000621908137578224},
+          {"term": "x1", "odds_ratio": 1.87832279474353, "or_lwr": 1.52736666779262, "or_upr": 2.30992111825513, "p_value": 2.32237714684819e-9},
+          {"term": "x2", "odds_ratio": 0.630742582616216, "or_lwr": 0.521374745193669, "or_upr": 0.763052313509344, "p_value": 0.00000210246805660415},
+          {"term": "armtreatment", "odds_ratio": 1.89310197201078, "or_lwr": 1.29067560325249, "or_upr": 2.77671249646298, "p_value": 0.00109241801672946}
+        ]
+      }
+    },
+    "dose_response_4pl": {
+      "data_sha256": "5e928d4339c60d3bbae600ff519d7453b748f33f3e3076edbdbfcd814657cc9e",
+      "expected": {
+        "ec50": 0.00000100003503770129,
+        "hill_slope": 1.09918564356966,
+        "r_squared": 0.999980924680142,
+        "n": 20,
+        "parameters": [
+          {"parameter": "left_asymptote", "estimate": 4.99531634704014},
+          {"parameter": "right_asymptote", "estimate": 100.025141255778},
+          {"parameter": "log10_ec50", "estimate": -5.99998478358624},
+          {"parameter": "scale", "estimate": 0.395105671588702}
+        ]
+      }
+    },
+    "michaelis_menten": {
+      "data_sha256": "a7ee5ead9645fcb65e32a3a1c931305bde7f56f516e5913dd45e853aa127940b",
+      "expected": {
+        "r_squared": 0.999820234510311,
+        "n": 8,
+        "parameters": [
+          {"parameter": "Vmax", "estimate": 49.9909898623927},
+          {"parameter": "Km", "estimate": 4.99491392909987}
+        ]
+      }
+    }
+  }
+}
