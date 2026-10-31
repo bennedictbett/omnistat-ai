@@ -667,7 +667,6 @@ the browser reaches them through Next.js proxies.
 Prioritised against the NexStat technical specification.
 
 ### Next
-- [ ] Golden test datasets with reference outputs for every procedure
 - [ ] Basic maps: offline tiles, boundaries, choropleth and heatmaps
 
 ### Phase 1 remaining
