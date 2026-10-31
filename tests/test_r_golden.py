@@ -1,5 +1,6 @@
 """Deterministic R result goldens captured with R 4.5.2."""
 import asyncio
+import hashlib
 import json
 import math
 import shutil
@@ -65,11 +66,12 @@ def _cases():
     event = logistic_rng.binomial(1, probability)
     logistic = pd.DataFrame({"event": event, "x1": x1, "x2": x2, "arm": arm})
 
-    curve_x = np.logspace(-9, -3, 20)
+    # Rounded so the last-digit differences of logspace/pow across platforms cannot change the input hash.
+    curve_x = np.array([float(f"{v:.9e}") for v in np.logspace(-9, -3, 20)])
     curve_noise = np.array([0.2, -0.3, 0.1, -0.2, 0.3, -0.1, 0.15, -0.25, 0.05, 0.2, -0.15, 0.1, -0.2, 0.25, -0.1, 0.15, -0.05, 0.1, -0.2, 0.15])
     dose_response = pd.DataFrame({
         "concentration": curve_x,
-        "response": 5 + 95 / (1 + (1e-6 / curve_x) ** 1.1) + curve_noise,
+        "response": np.round(5 + 95 / (1 + (1e-6 / curve_x) ** 1.1) + curve_noise, 9),
     })
     substrate = np.array([0.5, 1, 2, 4, 8, 16, 32, 64], dtype=float)
     michaelis_menten = pd.DataFrame({
@@ -96,6 +98,12 @@ def _cases():
         "dose_response_4pl": ({"x": "concentration", "y": "response"}, dose_response),
         "michaelis_menten": ({"x": "substrate", "y": "rate"}, michaelis_menten),
     }
+
+
+def _fingerprint(variables, data):
+    # Explicit LF: pandas defaults to CRLF on Windows, which would change the hash per platform.
+    columns = list(dict.fromkeys(variables.values()))
+    return hashlib.sha256(data[columns].to_csv(index=False, lineterminator="\n").encode("utf-8")).hexdigest()
 
 
 def _assert_golden(actual, expected, test, path=()):
@@ -134,5 +142,5 @@ def test_r_procedure_matches_golden_reference(test):
     result = asyncio.run(run_named_test(test, variables, data))
     assert result["ok"], result["error"]
     golden = GOLDENS["cases"][test]
-    assert result["data_sha256"] == golden["data_sha256"]
+    assert _fingerprint(variables, data) == golden["data_sha256"]
     _assert_golden(result["results"], golden["expected"], test)
