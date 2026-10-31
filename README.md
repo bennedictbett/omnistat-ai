@@ -34,6 +34,11 @@ runs. The **Test Wizard** reaches the same tests by answering a few questions.
   constant columns, numeric-looking text and infinities.
 - **Data dashboard**: overview, distributions, categorical charts, correlations.
 - **Dataset projects** saved in the browser.
+- **Maps** (Maps tab, works offline, no background tiles): upload GeoJSON
+  boundaries (WGS84 polygons) and colour areas by a mean, sum, median or row
+  count of your data (choropleth with quantile or equal-interval classes), or
+  show a heatmap of latitude/longitude points with an optional weight column.
+  Boundaries are kept in the tab only and are not saved with the dataset.
 
 ### Statistical Analyses (R)
 | Area | Procedures |
@@ -667,7 +672,8 @@ the browser reaches them through Next.js proxies.
 Prioritised against the NexStat technical specification.
 
 ### Next
-- [ ] Basic maps: offline tiles, boundaries, choropleth and heatmaps
+- [ ] Golden test datasets with reference outputs for every procedure
+- [ ] Basic maps: offline basemap tiles and map export (boundaries, choropleth and heatmaps are built)
 
 ### Phase 1 remaining
 - [ ] Python cross-check of R results
