@@ -116,6 +116,27 @@ it('requires plan review and explicit confirmation before executing a t-test', a
   expect(JSON.parse(fetchMock.mock.calls[1][1].body).analysis_plan).toEqual(plan)
 })
 
+it('shows the Python cross-check beside a result, and flags a disagreement', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  renderTTest()
+  fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
+  await screen.findByRole('region', { name: 'Analysis plan review' })
+  fetchMock.mockResolvedValueOnce({
+    ok: true, json: async () => ({
+      ok: true, results: { p_value: 0.4 }, error: null, plots: [], timed_out: false,
+      duration_s: 0.1, test: 'independent_t_test', title: plan.title,
+      variables: plan.variables, analysis_plan: plan, data_sha256: plan.data_sha256,
+      cross_check: {
+        status: 'disagree', engine: 'Python 3.13.5, SciPy 1.13.0', note: null,
+        checks: [{ label: 'p-value', r: 0.4, python: 0.5, agree: false, rel_tolerance: 1e-5 }],
+      },
+    }),
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm and Run in R' }))
+  const alert = await screen.findByText('Python cross-check: 1 of 1 values differ from R')
+  expect(alert.getAttribute('role')).toBe('alert')
+})
+
 it('invalidates a reviewed plan when columns change', async () => {
   fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
   renderTTest()
