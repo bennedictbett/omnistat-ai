@@ -1,4 +1,5 @@
 import { requestJson } from '@/lib/api'
+import { CrossCheck, isCrossCheck } from '@/lib/crossCheck'
 
 // ---------- Types ----------
 
@@ -158,6 +159,8 @@ export interface RRunResult {
   r_version?: string | null
   /** SHA-256 of the CSV sent to R: a fingerprint of the exact data used */
   data_sha256?: string
+  /** Independent Python recomputation of key values (R stays the result of record) */
+  cross_check?: CrossCheck
 }
 
 export interface UploadedData {
@@ -433,6 +436,7 @@ export function isRRunResult(body: unknown): body is RRunResult {
     (body.code === undefined || typeof body.code === 'string') &&
     (body.r_version === undefined || body.r_version === null || typeof body.r_version === 'string') &&
     (body.data_sha256 === undefined || typeof body.data_sha256 === 'string') &&
+    (body.cross_check === undefined || isCrossCheck(body.cross_check)) &&
     (body.analysis_plan === undefined || isAnalysisPlan(body.analysis_plan))
 }
 
