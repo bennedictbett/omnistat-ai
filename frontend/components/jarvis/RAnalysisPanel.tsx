@@ -5,6 +5,7 @@ import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
 import AssumptionChecks from '@/components/jarvis/AssumptionChecks'
 import ResultExplanation from '@/components/jarvis/ResultExplanation'
+import PythonCrossCheck from '@/components/jarvis/PythonCrossCheck'
 import { explainResult } from '@/lib/explainResult'
 import { analysisAuditFields, audit } from '@/lib/audit'
 import AnalysisReport from '@/components/reports/AnalysisReport'
@@ -251,6 +252,7 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       )}
 
       {result?.ok && <ResultExplanation explanation={explainResult(result, data.valueLabels)} />}
+      {result?.ok && result.cross_check && <PythonCrossCheck crossCheck={result.cross_check} />}
       {result && <ResultView result={result} />}
       {result && <AnalysisReport result={result} valueLabels={data.valueLabels} />}
       {result && <ReproducibilityBundle key={JSON.stringify(result.variables)} result={result} rows={data.rows} />}

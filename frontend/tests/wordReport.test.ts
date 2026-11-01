@@ -151,6 +151,17 @@ it('falls back to a results table for procedures without an APA statement and es
   expect(text).not.toContain('Plain-English')
 })
 
+it('records the Python cross-check in the Word method section only when present', async () => {
+  const cc = {
+    status: 'disagree' as const, engine: 'Python 3.13.5, SciPy 1.13.0', note: null,
+    checks: [{ label: 'Mean difference', r: 1, python: 2, agree: false, rel_tolerance: 1e-6 }],
+  }
+  const withCheck = (await documentXml({ ...results.independent_t_test, cross_check: cc })).xml.replace(/<[^>]+>/g, '')
+  expect(withCheck).toContain('Python cross-check (Python 3.13.5, SciPy 1.13.0): 1 of 1 recomputed values differ from R (Mean difference).')
+  const without = (await documentXml(results.independent_t_test)).xml.replace(/<[^>]+>/g, '')
+  expect(without).not.toContain('Python cross-check')
+})
+
 it('refuses failed analyses', async () => {
   await expect(buildWordReport({ ...results.shapiro_wilk, ok: false })).rejects.toThrow('successful')
 })

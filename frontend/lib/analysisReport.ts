@@ -1,4 +1,5 @@
 import { explainResult, explanationText } from './explainResult'
+import { crossCheckSummary } from './crossCheck'
 import { asCurveFit, formatNumber, isPKey, prettyKey, RRunResult } from './rApi'
 
 export const MAX_REPORT_TABLE_ROWS = 200
@@ -60,6 +61,7 @@ export function buildReportHtml(
     ...Object.entries(result.variables).map(([role, col]): [string, string] => [`Column: ${prettyKey(role)}`, col]),
     ['Data SHA-256', result.data_sha256 ?? 'Not recorded'],
   ]
+  if (result.cross_check) methods.push(['Python cross-check', crossCheckSummary(result.cross_check)])
   if (plan) {
     methods.push(
       ['Rows selected / used / excluded (missing)', `${plan.rows_total} / ${plan.rows_used} / ${plan.rows_dropped_missing}`],
