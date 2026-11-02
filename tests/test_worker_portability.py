@@ -20,7 +20,7 @@ def test_worker_limits_preserve_supported_controls(monkeypatch, runner, platform
     monkeypatch.setattr(runner, "resource", resource)
     monkeypatch.setattr(runner, "sys", SimpleNamespace(platform=platform))
     if runner is math_runner:
-        monkeypatch.setattr(math_runner.os, "setsid", lambda: None)
+        monkeypatch.setattr(math_runner.os, "setsid", lambda: None, raising=False)
         apply_limits = math_runner._limits
         file_limit = 1024**2
     else:
@@ -43,7 +43,7 @@ def test_unexpected_limit_errors_are_not_suppressed(monkeypatch, runner):
 
     monkeypatch.setattr(runner, "resource", SimpleNamespace(RLIMIT_CPU="cpu", setrlimit=fail))
     if runner is math_runner:
-        monkeypatch.setattr(math_runner.os, "setsid", lambda: None)
+        monkeypatch.setattr(math_runner.os, "setsid", lambda: None, raising=False)
         apply_limits = math_runner._limits
     else:
         apply_limits = r_runner._apply_limits
