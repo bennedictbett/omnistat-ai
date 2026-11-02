@@ -1,0 +1,32 @@
+[Unit]
+Description=OmniStat AI API (R and maths run in network-less Docker containers)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+User=omnistat
+Group=omnistat
+WorkingDirectory=/opt/omnistat
+EnvironmentFile=/etc/omnistat/omnistat.env
+# No --reload: it is not for production.
+ExecStart=/opt/omnistat/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+
+# Per-run R working directories must be visible to the Docker daemon, so they live in
+# a normal directory (not a private /tmp) that the container user can traverse (0755).
+Environment=TMPDIR=/var/lib/omnistat/tmp
+Environment=R_SANDBOX=docker
+Environment=MATH_SANDBOX=docker
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/omnistat
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

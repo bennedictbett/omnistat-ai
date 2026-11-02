@@ -1,0 +1,9 @@
+# setup.sh replaces api.example.com with your domain. Caddy obtains and renews the
+# HTTPS certificate automatically once DNS points at this server.
+api.example.com {
+	encode gzip
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy 127.0.0.1:8000
+}
