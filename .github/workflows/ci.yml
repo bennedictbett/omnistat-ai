@@ -34,6 +34,10 @@ jobs:
           Rscript -e 'stopifnot(requireNamespace("jsonlite", quietly=TRUE))'
           ffmpeg -v error -f lavfi -i sine=frequency=440:duration=0.1 -c:a libopus -f ogg -y /tmp/ci-audio.ogg
           ffmpeg -v error -f lavfi -i sine=frequency=440:duration=0.1 -c:a libmp3lame -f mp3 -y /tmp/ci-audio.mp3
+      - name: Build sandbox worker images
+        run: |
+          docker build -f Dockerfile.rworker -t omnistat-r-worker .
+          docker build -f Dockerfile.mathworker -t omnistat-math-worker .
       - name: Run backend tests
         run: python -m pytest -q -ra
 
