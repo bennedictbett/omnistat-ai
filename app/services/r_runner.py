@@ -7,8 +7,9 @@
   process group (killed wholesale on timeout) and a minimal environment.
 - A semaphore caps concurrent R processes.
 
-rlimits + a clean env are defence in depth, NOT isolation. Run the app in a container
-with no outbound network, a non-root user and a read-only filesystem (except /tmp).
+rlimits + a clean env are defence in depth, NOT isolation. Set R_SANDBOX=docker to run
+each job in a container with no network, a read-only root, no capabilities and hard
+memory / CPU / PID limits (see Dockerfile.rworker), or run the whole app that way.
 Never pass user-supplied strings into `code`; pass them via `params`.
 """
 from __future__ import annotations
@@ -23,6 +24,7 @@ import signal
 import sys
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -41,6 +43,17 @@ MEMORY_BYTES = int(os.getenv("R_MEMORY_MB", "2048")) * 1024**2
 MAX_FILE_BYTES = 20 * 1024**2
 MAX_OUTPUT_CHARS = 20_000
 MAX_PLOT_BYTES = 5 * 1024**2
+DRAIN_SECONDS = 5.0
+
+# R_SANDBOX=docker runs every R job in a network-less, read-only container.
+# There is deliberately no fallback to host execution if Docker is unavailable.
+DOCKER_SANDBOX = os.getenv("R_SANDBOX", "").strip().lower() == "docker"
+DOCKER_BIN = os.getenv("DOCKER_BIN", "docker")
+DOCKER_IMAGE = os.getenv("R_DOCKER_IMAGE", "omnistat-r-worker")
+DOCKER_USER = os.getenv("R_DOCKER_USER", "65534:65534")
+DOCKER_CPUS = os.getenv("R_DOCKER_CPUS", "1")
+DOCKER_PIDS = int(os.getenv("R_DOCKER_PIDS", "64"))
+DOCKER_FAILURE_CODES = (125, 126, 127)  # docker itself failed (e.g. image missing)
 
 _sem: asyncio.Semaphore | None = None
 logger = logging.getLogger("omnistat.r_runner")
@@ -102,6 +115,75 @@ def _apply_limits() -> None:
     # RLIMIT_NPROC is per-user, so set process limits at the container level.
 
 
+def _docker_command(workdir: Path, name: str) -> list[str]:
+    """`docker run` argv: no network, read-only root, no capabilities, hard limits.
+
+    Only the per-run working directory (and a small tmpfs) is writable."""
+    memory = f"{MEMORY_BYTES // 1024**2}m"
+    return [
+        DOCKER_BIN, "run", "--rm", "--name", name,
+        "--network", "none",
+        "--read-only",
+        "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
+        "--user", DOCKER_USER,
+        "--memory", memory, "--memory-swap", memory,
+        "--cpus", DOCKER_CPUS,
+        "--pids-limit", str(DOCKER_PIDS),
+        "--ulimit", f"cpu={CPU_SECONDS}:{CPU_SECONDS}",
+        "--ulimit", f"fsize={MAX_FILE_BYTES}:{MAX_FILE_BYTES}",
+        "--mount", f"type=bind,source={workdir},target=/work",
+        "--workdir", "/work",
+        "-e", "HOME=/work", "-e", "TMPDIR=/tmp", "-e", "LANG=C.UTF-8",
+        DOCKER_IMAGE,
+        "Rscript", "--vanilla", "wrapper.R",
+    ]
+
+
+async def _kill(proc, container: str | None) -> None:
+    """Stop the whole run, not just the direct child."""
+    if container:
+        # Killing the docker client would leave the container running.
+        try:
+            killer = await asyncio.create_subprocess_exec(
+                DOCKER_BIN, "kill", container,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(killer.wait(), 10)
+        except (OSError, asyncio.TimeoutError):
+            logger.warning("Could not kill container %s", container)
+    if POSIX:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return
+    # Windows: Rscript.exe spawns R.exe, which keeps the pipes open if only the
+    # parent is killed, so communicate() would block forever.
+    try:
+        killer = await asyncio.create_subprocess_exec(
+            "taskkill", "/PID", str(proc.pid), "/T", "/F",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(killer.wait(), 10)
+    except (OSError, asyncio.TimeoutError):
+        pass
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+async def _drain(proc) -> tuple[bytes, bytes]:
+    """Collect output after a kill without ever waiting indefinitely."""
+    try:
+        return await asyncio.wait_for(proc.communicate(), DRAIN_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning("R output pipes did not close after kill")
+        return b"", b""
+
+
 def _trim(b: bytes) -> str:
     s = b.decode("utf-8", errors="replace")
     return s if len(s) <= MAX_OUTPUT_CHARS else s[:MAX_OUTPUT_CHARS] + "\n...[truncated]"
@@ -147,32 +229,53 @@ async def _run_r_unlocked(
         if data_csv is not None:
             (workdir / "input.csv").write_bytes(data_csv)
 
-        if POSIX:
-            env = {
-                "PATH": "/usr/local/bin:/usr/bin:/bin",
-                "HOME": str(workdir),
-                "TMPDIR": str(workdir),
-                "LANG": "C.UTF-8",
-            }
-            spawn_kwargs = {"start_new_session": True, "preexec_fn": _apply_limits}
+        container = None
+        if DOCKER_SANDBOX:
+            # The container user is unrelated to the app user, so the throwaway
+            # mount must be writable by anyone (it is deleted after the run).
+            for path in (workdir, workdir / "out"):
+                path.chmod(0o777)
+            container = f"omnistat-r-{uuid.uuid4().hex[:12]}"
+            command = _docker_command(workdir, container)
+            if shutil.which(command[0]) is None:
+                return RResult(
+                    ok=False,
+                    error=f"R sandbox unavailable: '{DOCKER_BIN}' was not found. "
+                          "Install Docker or unset R_SANDBOX.",
+                )
+            # The docker client needs the caller's environment (DOCKER_HOST, ...);
+            # R itself only ever sees the container's fixed environment.
+            env = dict(os.environ)
+            spawn_kwargs = {"start_new_session": True} if POSIX else {}
+            cwd = None
         else:
-            # Windows dev only: no sandboxing here, use Docker/WSL for anything real.
-            env = {**os.environ, "TMPDIR": str(workdir)}
-            spawn_kwargs = {}
-        if R_LIBS:
-            env["R_LIBS"] = R_LIBS
+            if POSIX:
+                env = {
+                    "PATH": "/usr/local/bin:/usr/bin:/bin",
+                    "HOME": str(workdir),
+                    "TMPDIR": str(workdir),
+                    "LANG": "C.UTF-8",
+                }
+                spawn_kwargs = {"start_new_session": True, "preexec_fn": _apply_limits}
+            else:
+                # Windows dev only: no sandboxing here, set R_SANDBOX=docker for isolation.
+                env = {**os.environ, "TMPDIR": str(workdir)}
+                spawn_kwargs = {}
+            if R_LIBS:
+                env["R_LIBS"] = R_LIBS
 
-        if sys.platform == "darwin":
-            logger.warning(
-                "macOS does not support the worker address-space limit; "
-                "CPU, file-size and wall-clock limits remain enabled. "
-                "Use a Linux container for memory-limited execution."
-            )
-        # Resolve against the parent's PATH before giving R a restricted environment.
-        executable = shutil.which(RSCRIPT) or RSCRIPT
+            if sys.platform == "darwin":
+                logger.warning(
+                    "macOS does not support the worker address-space limit; "
+                    "CPU, file-size and wall-clock limits remain enabled. "
+                    "Use a Linux container for memory-limited execution."
+                )
+            # Resolve against the parent's PATH before giving R a restricted environment.
+            command = [shutil.which(RSCRIPT) or RSCRIPT, "--vanilla", "wrapper.R"]
+            cwd = workdir
         proc = await asyncio.create_subprocess_exec(
-            executable, "--vanilla", "wrapper.R",
-            cwd=workdir,
+            *command,
+            cwd=cwd,
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -184,11 +287,8 @@ async def _run_r_unlocked(
             out, err = await asyncio.wait_for(proc.communicate(), timeout)
         except asyncio.TimeoutError:
             timed_out = True
-            if POSIX:
-                os.killpg(proc.pid, signal.SIGKILL)
-            else:
-                proc.kill()
-            out, err = await proc.communicate()
+            await _kill(proc, container)
+            out, err = await _drain(proc)
 
         results: dict = {}
         r_error: str | None = None
@@ -208,6 +308,9 @@ async def _run_r_unlocked(
 
         if timed_out:
             r_error = f"Timed out after {timeout:.0f}s"
+        elif container and proc.returncode in DOCKER_FAILURE_CODES and not rj.exists():
+            detail = _trim(err).strip().splitlines()
+            r_error = "R sandbox failed to start: " + (detail[-1] if detail else f"docker exit {proc.returncode}")
         elif proc.returncode != 0 and not r_error:
             r_error = f"R exited with code {proc.returncode} (possible memory/CPU limit)"
 
