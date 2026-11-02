@@ -1,12 +1,25 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import analytics, agent
+from app.services import docker_sandbox
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Fail loudly in the logs (jobs already fail closed) if a sandbox is misconfigured.
+    app.state.sandbox = await asyncio.to_thread(docker_sandbox.verify_configured)
+    yield
+
 
 app = FastAPI(
     title="OmniStat AI",
     description="AI-powered statistical analysis engine for clinical and research data",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -58,5 +71,10 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
-    """Used by Render and Docker healthchecks."""
-    return {"status": "ok"}
+    """Used by Render and Docker healthchecks. Stays 'ok' (liveness only); sandbox
+    problems are reported alongside so they are visible without failing the probe."""
+    body = {"status": "ok"}
+    sandbox = getattr(app.state, "sandbox", None)
+    if sandbox:
+        body["sandbox"] = {w: ("ready" if p is None else "unavailable") for w, p in sandbox.items()}
+    return body

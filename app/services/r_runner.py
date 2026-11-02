@@ -28,6 +28,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
+from app.services import docker_sandbox
+
 try:
     import resource  # POSIX only
 except ImportError:  # native Windows: no rlimits / process groups
@@ -48,12 +50,9 @@ DRAIN_SECONDS = 5.0
 # R_SANDBOX=docker runs every R job in a network-less, read-only container.
 # There is deliberately no fallback to host execution if Docker is unavailable.
 DOCKER_SANDBOX = os.getenv("R_SANDBOX", "").strip().lower() == "docker"
-DOCKER_BIN = os.getenv("DOCKER_BIN", "docker")
+DOCKER_BIN = docker_sandbox.DOCKER_BIN
 DOCKER_IMAGE = os.getenv("R_DOCKER_IMAGE", "omnistat-r-worker")
-DOCKER_USER = os.getenv("R_DOCKER_USER", "65534:65534")
-DOCKER_CPUS = os.getenv("R_DOCKER_CPUS", "1")
-DOCKER_PIDS = int(os.getenv("R_DOCKER_PIDS", "64"))
-DOCKER_FAILURE_CODES = (125, 126, 127)  # docker itself failed (e.g. image missing)
+DOCKER_FAILURE_CODES = docker_sandbox.FAILURE_CODES
 
 _sem: asyncio.Semaphore | None = None
 logger = logging.getLogger("omnistat.r_runner")
@@ -116,43 +115,22 @@ def _apply_limits() -> None:
 
 
 def _docker_command(workdir: Path, name: str) -> list[str]:
-    """`docker run` argv: no network, read-only root, no capabilities, hard limits.
-
-    Only the per-run working directory (and a small tmpfs) is writable."""
-    memory = f"{MEMORY_BYTES // 1024**2}m"
-    return [
-        DOCKER_BIN, "run", "--rm", "--name", name,
-        "--network", "none",
-        "--read-only",
-        "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
-        "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges",
-        "--user", DOCKER_USER,
-        "--memory", memory, "--memory-swap", memory,
-        "--cpus", DOCKER_CPUS,
-        "--pids-limit", str(DOCKER_PIDS),
-        "--ulimit", f"cpu={CPU_SECONDS}:{CPU_SECONDS}",
-        "--ulimit", f"fsize={MAX_FILE_BYTES}:{MAX_FILE_BYTES}",
-        "--mount", f"type=bind,source={workdir},target=/work",
-        "--workdir", "/work",
-        "-e", "HOME=/work", "-e", "TMPDIR=/tmp", "-e", "LANG=C.UTF-8",
-        DOCKER_IMAGE,
-        "Rscript", "--vanilla", "wrapper.R",
-    ]
+    """Hardened `docker run` for one R job; only the working directory is writable."""
+    return docker_sandbox.hardened_run_args(
+        name, DOCKER_IMAGE,
+        memory_mb=MEMORY_BYTES // 1024**2,
+        cpu_seconds=CPU_SECONDS,
+        max_file_bytes=MAX_FILE_BYTES,
+        mounts=[f"type=bind,source={workdir},target=/work"],
+        workdir="/work",
+        env={"HOME": "/work"},
+    ) + ["Rscript", "--vanilla", "wrapper.R"]
 
 
 async def _kill(proc, container: str | None) -> None:
     """Stop the whole run, not just the direct child."""
     if container:
-        # Killing the docker client would leave the container running.
-        try:
-            killer = await asyncio.create_subprocess_exec(
-                DOCKER_BIN, "kill", container,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-            )
-            await asyncio.wait_for(killer.wait(), 10)
-        except (OSError, asyncio.TimeoutError):
-            logger.warning("Could not kill container %s", container)
+        await docker_sandbox.kill_container(container)
     if POSIX:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
