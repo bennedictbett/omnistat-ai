@@ -54,6 +54,8 @@ runs. The **Test Wizard** reaches the same tests by answering a few questions.
 - **Assumption checks** with suggested alternatives for small samples.
 - **R code** shown for every result, with a SHA-256 fingerprint of the data.
 - **Plain-English summaries** in which every number links to its source.
+- **Python cross-check**: key numbers are recomputed independently with SciPy and
+  statsmodels and compared with R; disagreements are flagged.
 
 ### Reports and Reproducibility
 - **Print / Save as PDF** and **Word (.docx) with APA 7 formatting**.
@@ -312,6 +314,29 @@ embedded. Reports are generated in the browser from the displayed result; they
 do not upload or rerun the analysis, but labels, tables and charts can reveal
 sensitive information. As with the printable report, the document is a snapshot
 to review with a statistician, not a signed attestation.
+
+### Python Cross-Check
+After every successful R run, the backend recomputes the headline numbers in
+Python (SciPy, plus statsmodels for regression) from the same prepared data and
+compares them with R. The result panel shows a badge: **agrees** (all values
+match within a tight tolerance), **differs** (the differing values are listed
+first and flagged as an alert) or **not available** (with the reason). R stays
+the reported result, and agreement confirms the arithmetic, not that the method
+suits your data. The check never fails or delays an analysis beyond a fraction of
+a second, and the outcome is added to the printable report and the Word report.
+
+Covered: every procedure in the table above. For example, regression compares
+the F-test, R², every coefficient with its standard error, confidence interval
+and robust (HC3) p-value, Breusch-Pagan, VIF, odds ratios, AUC and
+Hosmer-Lemeshow. A few values are deliberately not compared: the Hodges-Lehmann
+shift intervals, Spearman's p-value (R and SciPy use different methods) and
+rank-test p-values on very large groups. If Python and R see a different number
+of rows (for example because of how blank cells are read), the check reports
+"not available" rather than a false disagreement. Datasets over 50,000 rows are
+not cross-checked.
+
+The `cross_check` object in `/api/r/run` responses holds `status`, `engine`,
+`note` and `checks` (label, R value, Python value, agree, relative tolerance).
 
 ### Printable Analysis Report
 
@@ -676,7 +701,6 @@ Prioritised against the NexStat technical specification.
 - [ ] Basic maps: offline basemap tiles and map export (boundaries, choropleth and heatmaps are built)
 
 ### Phase 1 remaining
-- [ ] Python cross-check of R results
 - [ ] Stronger sandboxing (containers without network access)
 - [ ] Large datasets with Arrow/DuckDB (1 million rows on 8 GB RAM)
 - [ ] Offline desktop app (Electron or Tauri) with local AI models

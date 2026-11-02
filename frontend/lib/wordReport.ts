@@ -1,6 +1,7 @@
 import type { ITableCellBorders, ParagraphChild } from 'docx'
 import { apaStatement, apaTables, ApaRun, ApaTable } from './apa'
 import { explainResult, explanationText } from './explainResult'
+import { crossCheckSummary } from './crossCheck'
 import { formatNumber, isPKey, prettyKey, RRunResult } from './rApi'
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -106,6 +107,7 @@ export async function buildWordReport(
     `Columns: ${Object.entries(result.variables).map(([role, col]) => `${prettyKey(role)} = ${col}`).join('; ')}.`,
     `Data SHA-256: ${result.data_sha256 ?? 'not recorded'}.`,
   ]
+  if (result.cross_check) method.push(crossCheckSummary(result.cross_check))
   if (plan) {
     method.push(`Rows selected: ${plan.rows_total}; used: ${plan.rows_used}; excluded for missing values: ${plan.rows_dropped_missing} (complete cases across selected columns).`)
   }

@@ -11,12 +11,14 @@ returns results with emit("name", value). Plots are captured automatically.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
 
 import pandas as pd
 
+from app.services.python_crosscheck import cross_check
 from app.services.r_runner import run_r
 
 MAX_ROWS = 200_000
@@ -555,4 +557,6 @@ async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame)
             "data_sha256": digest,
         }
     )
+    if out.get("ok"):
+        out["cross_check"] = await asyncio.to_thread(cross_check, test, variables, csv, out["results"])
     return out
