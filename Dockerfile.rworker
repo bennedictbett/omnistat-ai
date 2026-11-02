@@ -1,0 +1,12 @@
+# Minimal R worker for R_SANDBOX=docker (see app/services/r_runner.py).
+# Build:  docker build -f Dockerfile.rworker -t omnistat-r-worker .
+# The runner starts it with --network none, --read-only, --cap-drop ALL and limits.
+FROM rocker/r-ver:4.4.1
+
+# Pre-install every R package the templates use. Runtime installs are impossible
+# (no network, read-only filesystem).
+RUN install2.r --error --skipinstalled jsonlite \
+ && rm -rf /tmp/downloaded_packages
+
+WORKDIR /work
+CMD ["Rscript", "--vanilla", "wrapper.R"]
