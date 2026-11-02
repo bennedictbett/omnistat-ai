@@ -644,10 +644,33 @@ a security sandbox. Linux retains the configured address-space limit. The R
 executable is resolved from your shell's `PATH` (including Homebrew); alternatively,
 set `RSCRIPT_BIN` to its absolute path.
 
+#### Container sandbox for R (no network)
+
+Set `R_SANDBOX=docker` to run every R job in its own throwaway container instead of
+a host process. Each container has no network (`--network none`), a read-only root
+filesystem (plus a 64 MB `/tmp` tmpfs), all capabilities dropped, `no-new-privileges`,
+a non-root user, and hard memory, CPU, process-count and file-size limits. Only the
+per-run working directory is mounted writable. If Docker is unavailable the run fails
+with an explicit error; it never falls back to running R on the host.
+
+```bash
+docker build -f Dockerfile.rworker -t omnistat-r-worker .
+export R_SANDBOX=docker        # PowerShell: $env:R_SANDBOX = "docker"
+```
+
+Optional settings: `R_DOCKER_IMAGE` (default `omnistat-r-worker`), `DOCKER_BIN`,
+`R_DOCKER_USER`, `R_DOCKER_CPUS`, `R_DOCKER_PIDS`, plus the existing `R_MEMORY_MB`
+and `R_CPU_SECONDS`. The API process needs access to the Docker CLI and the host
+path of its temp directory, so run the API on the host (or mount the Docker socket
+deliberately); inside a container without Docker, run the whole app with no network
+instead. On timeout the container is killed; on native Windows without Docker the
+whole `Rscript` process tree is now terminated, so a runaway job can no longer hang
+the request.
+
 Run the focused worker checks with:
 
 ```bash
-python -m pytest -q tests/test_worker_portability.py tests/test_math.py tests/test_r_runner.py tests/test_r_templates.py tests/test_r_security.py
+python -m pytest -q tests/test_worker_portability.py tests/test_math.py tests/test_r_runner.py tests/test_r_templates.py tests/test_r_security.py tests/test_r_sandbox.py
 ```
 
 The Ogg recognition fixture uses Opus, the same encoder as the WebM fixture, so
@@ -701,7 +724,7 @@ Prioritised against the NexStat technical specification.
 - [ ] Basic maps: offline basemap tiles and map export (boundaries, choropleth and heatmaps are built)
 
 ### Phase 1 remaining
-- [ ] Stronger sandboxing (containers without network access)
+- [x] Stronger sandboxing for R: container worker with no network (`R_SANDBOX=docker`); math worker still uses rlimits only
 - [ ] Large datasets with Arrow/DuckDB (1 million rows on 8 GB RAM)
 - [ ] Offline desktop app (Electron or Tauri) with local AI models
 - [ ] Privacy tools: identifier detection, pseudonymisation, encryption at rest, roles
