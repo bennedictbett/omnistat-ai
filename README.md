@@ -704,6 +704,44 @@ Pull requests and pushes to `master` run two checks:
 To require these checks before merging, configure a GitHub branch protection rule
 or ruleset for `master`; the workflow alone does not enforce merge protection.
 
+### Deploying on a Linux VPS (with the container sandbox)
+
+Render's Python runtime cannot start Docker containers or block outbound traffic, so
+for real users run the API on a small Linux server (Ubuntu 24.04 or 22.04; any
+provider works, including Hetzner, DigitalOcean or Oracle Cloud's Always Free tier,
+subject to their current terms). The API runs on the host as an unprivileged
+`omnistat` user behind Caddy (automatic HTTPS) and starts one throwaway
+network-less container per R job or calculation. R and SymPy exist only inside the
+worker images, so the host needs no R install.
+
+```bash
+git clone https://github.com/bennedictbett/omnistat-ai.git && cd omnistat-ai
+sudo bash deploy/vps/setup.sh api.example.com     # your API domain
+sudoedit /etc/omnistat/omnistat.env                # GROQ_API_KEY, HF_*; an API key is generated
+sudo systemctl restart omnistat-api
+sudo bash /opt/omnistat/deploy/vps/smoke-test.sh api.example.com
+```
+
+Point an `A` record for the domain at the server before the HTTPS certificate can be
+issued. The smoke test checks that `/health` reports both sandboxes ready, that a
+worker container has no network and a read-only filesystem, that a maths request and
+an R t-test run end to end, and prints per-job timings (use them to decide whether a
+warm container pool is worth building). Then, in Vercel, set `BACKEND_URL` and
+`NEXT_PUBLIC_API_URL` to `https://api.example.com` and `OMNISTAT_API_KEY` to the key
+in `/etc/omnistat/omnistat.env`.
+
+Files are in [`deploy/vps/`](deploy/vps): `setup.sh` (idempotent: updates code,
+dependencies, images and unit files), `omnistat-api.service`, `Caddyfile`,
+`env.example` and `smoke-test.sh`. To update later, `git pull` and re-run `setup.sh`.
+
+Security notes: membership of the `docker` group is effectively root on that host, so
+use a server dedicated to OmniStat, keep it patched, and expose only ports 22, 80 and
+443 (the script enables `ufw` accordingly); rootless Docker can narrow this further.
+Per-run R working directories live in `/var/lib/omnistat/tmp` (not a private `/tmp`)
+because the Docker daemon must be able to see them. The scripts were written and
+syntax-checked on Windows, so treat your first deployment as the real test and run
+the smoke test.
+
 ---
 
 ## API Endpoints
@@ -738,7 +776,7 @@ Prioritised against the NexStat technical specification.
 - [ ] Basic maps: offline basemap tiles and map export (boundaries, choropleth and heatmaps are built)
 
 ### Phase 1 remaining
-- [x] Stronger sandboxing: R and maths workers can run in containers with no network (`R_SANDBOX` / `MATH_SANDBOX=docker`); still to do: enable it by default in the hosted deployment (needs a worker host with Docker access)
+- [x] Stronger sandboxing: R and maths workers can run in containers with no network (`R_SANDBOX` / `MATH_SANDBOX=docker`); a Linux VPS deployment kit is in `deploy/vps/` (not yet deployed or tested on a real server)
 - [ ] Large datasets with Arrow/DuckDB (1 million rows on 8 GB RAM)
 - [ ] Offline desktop app (Electron or Tauri) with local AI models
 - [ ] Privacy tools: identifier detection, pseudonymisation, encryption at rest, roles
