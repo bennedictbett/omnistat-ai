@@ -1,0 +1,13 @@
+# Minimal SymPy worker for MATH_SANDBOX=docker (see app/services/math_runner.py).
+# Build:  docker build -f Dockerfile.mathworker -t omnistat-math-worker .
+# The runner starts it with --network none, --read-only, --cap-drop ALL and limits.
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir sympy==1.14.0
+
+# Only the engine is copied: it has no dependency on the rest of the application.
+COPY app/services/math_engine.py /app/math_engine.py
+
+WORKDIR /tmp
+ENV PYTHONDONTWRITEBYTECODE=1
+CMD ["python", "-I", "/app/math_engine.py"]
