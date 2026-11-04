@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import json
 import logging
 import os
@@ -105,21 +106,22 @@ class RResult:
         return asdict(self)
 
 
-def _apply_limits() -> None:
+def _apply_limits(cpu_seconds: int | None = None) -> None:
     """Runs in the child just before exec."""
-    resource.setrlimit(resource.RLIMIT_CPU, (CPU_SECONDS, CPU_SECONDS))
+    cpu = cpu_seconds or CPU_SECONDS
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
     if sys.platform != "darwin":
         resource.setrlimit(resource.RLIMIT_AS, (MEMORY_BYTES, MEMORY_BYTES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_FILE_BYTES, MAX_FILE_BYTES))
     # RLIMIT_NPROC is per-user, so set process limits at the container level.
 
 
-def _docker_command(workdir: Path, name: str) -> list[str]:
+def _docker_command(workdir: Path, name: str, cpu_seconds: int | None = None) -> list[str]:
     """Hardened `docker run` for one R job; only the working directory is writable."""
     return docker_sandbox.hardened_run_args(
         name, DOCKER_IMAGE,
         memory_mb=MEMORY_BYTES // 1024**2,
-        cpu_seconds=CPU_SECONDS,
+        cpu_seconds=cpu_seconds or CPU_SECONDS,
         max_file_bytes=MAX_FILE_BYTES,
         mounts=[f"type=bind,source={workdir},target=/work"],
         workdir="/work",
@@ -172,10 +174,13 @@ async def run_r(
     data_csv: bytes | None = None,
     params: dict | None = None,
     timeout: float = 30.0,
+    cpu_seconds: int | None = None,
 ) -> RResult:
     """Run R code. `df` holds data_csv, `params` holds the params dict,
     and emit("name", value) returns structured results.
 
+    `timeout` is the wall-clock limit; `cpu_seconds` overrides R_CPU_SECONDS for this run
+    (larger datasets need more of both).
     Waits at most QUEUE_WAIT_SECONDS for a free slot, then raises RunnerBusy."""
     sem = _semaphore()
     try:
@@ -183,7 +188,7 @@ async def run_r(
     except asyncio.TimeoutError:
         raise RunnerBusy("R workers are busy, try again shortly") from None
     try:
-        return await _run_r_unlocked(code, data_csv, params, timeout)
+        return await _run_r_unlocked(code, data_csv, params, timeout, cpu_seconds)
     finally:
         sem.release()
 
@@ -193,6 +198,7 @@ async def _run_r_unlocked(
     data_csv: bytes | None = None,
     params: dict | None = None,
     timeout: float = 30.0,
+    cpu_seconds: int | None = None,
 ) -> RResult:
     """Run R code. `df` holds data_csv, `params` holds the params dict,
     and emit("name", value) returns structured results."""
@@ -214,7 +220,7 @@ async def _run_r_unlocked(
             for path in (workdir, workdir / "out"):
                 path.chmod(0o777)
             container = f"omnistat-r-{uuid.uuid4().hex[:12]}"
-            command = _docker_command(workdir, container)
+            command = _docker_command(workdir, container, cpu_seconds)
             if shutil.which(command[0]) is None:
                 return RResult(
                     ok=False,
@@ -234,7 +240,7 @@ async def _run_r_unlocked(
                     "TMPDIR": str(workdir),
                     "LANG": "C.UTF-8",
                 }
-                spawn_kwargs = {"start_new_session": True, "preexec_fn": _apply_limits}
+                spawn_kwargs = {"start_new_session": True, "preexec_fn": functools.partial(_apply_limits, cpu_seconds)}
             else:
                 # Windows dev only: no sandboxing here, set R_SANDBOX=docker for isolation.
                 env = {**os.environ, "TMPDIR": str(workdir)}
