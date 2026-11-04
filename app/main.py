@@ -1,18 +1,38 @@
 import asyncio
+import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analytics, agent
-from app.services import docker_sandbox
+from app.api.routes import analytics, agent, datasets
+from app.security.body_limit import BodyLimitMiddleware
+from app.services import dataset_store, docker_sandbox
+
+PURGE_INTERVAL_SECONDS = 1800
+
+
+async def _purge_loop() -> None:
+    while True:
+        await asyncio.sleep(PURGE_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(dataset_store.purge_expired)
+        except Exception:
+            logging.getLogger("omnistat.main").exception("Dataset expiry sweep failed")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fail loudly in the logs (jobs already fail closed) if a sandbox is misconfigured.
     app.state.sandbox = await asyncio.to_thread(docker_sandbox.verify_configured)
-    yield
+    purger = asyncio.create_task(_purge_loop())
+    try:
+        yield
+    finally:
+        purger.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await purger
 
 
 app = FastAPI(
@@ -22,6 +42,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(BodyLimitMiddleware, path="/api/datasets", max_bytes=dataset_store.max_upload_bytes)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,6 +53,7 @@ app.add_middleware(
 
 # ── Core routes (always loaded) ─────────────────────────────────
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(datasets.router,  prefix="/api/datasets",  tags=["Datasets"])
 app.include_router(agent.router,     prefix="/api/agent",     tags=["Agent"])
 
 # ── Optional routes (loaded only if the file is implemented) ───
