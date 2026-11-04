@@ -5,6 +5,8 @@ Limits are read from env on every call (so they are easy to tune and to test):
   R_GLOBAL_RATE_PER_MIN  across all clients (default 60)
   MATH_RATE_LIMIT_PER_MIN / MATH_GLOBAL_RATE_PER_MIN  the same for the equations endpoint (30 / 200)
   VOICE_RATE_LIMIT_PER_MIN / VOICE_GLOBAL_RATE_PER_MIN  the same for voice transcription (10 / 60)
+  DATASET_UPLOAD_RATE_PER_MIN / DATASET_UPLOAD_GLOBAL_RATE_PER_MIN  public dataset uploads (6 / 30)
+  DATASET_READ_RATE_PER_MIN / DATASET_READ_GLOBAL_RATE_PER_MIN  public dataset reads (120 / 1200)
 
 In-memory means each server process counts separately. That is fine for one
 instance; if you scale to several, move the counters to Redis.
@@ -47,10 +49,14 @@ def client_id(request: Request) -> str:
     return request.headers.get("x-client-ip") or (request.client.host if request.client else "unknown")
 
 
-def _enforce(request: Request, tag: str, per_client: int, global_limit: int) -> None:
-    """Sliding-window check. `tag` keeps one endpoint's counters apart from another's."""
+def _enforce(request: Request, tag: str, per_client: int, global_limit: int, trust_proxy_ip: bool = True) -> None:
+    """Sliding-window check. `tag` keeps one endpoint's counters apart from another's.
+
+    Public endpoints pass trust_proxy_ip=False: there the X-Client-IP header could be
+    forged by anyone, so only the connection's own address is used."""
     now = time.monotonic()
-    ckey = f"{tag}c:{client_id(request)}"
+    caller = client_id(request) if trust_proxy_ip else (request.client.host if request.client else "unknown")
+    ckey = f"{tag}c:{caller}"
     with _lock:
         wait = _retry_after(ckey, per_client, now)
         if wait is None:
@@ -83,6 +89,26 @@ async def rate_limit_math(request: Request, key_id: str = Depends(require_api_ke
         request, "math:",
         int(os.getenv("MATH_RATE_LIMIT_PER_MIN", "30")),
         int(os.getenv("MATH_GLOBAL_RATE_PER_MIN", "200")),
+    )
+
+
+async def rate_limit_dataset_upload(request: Request) -> None:
+    """Public (no API key): each upload parses and stores a file, so this is tight."""
+    _enforce(
+        request, "dataset-up:",
+        int(os.getenv("DATASET_UPLOAD_RATE_PER_MIN", "6")),
+        int(os.getenv("DATASET_UPLOAD_GLOBAL_RATE_PER_MIN", "30")),
+        trust_proxy_ip=False,
+    )
+
+
+async def rate_limit_dataset_read(request: Request) -> None:
+    """Public: paging through rows and reading summaries. Holding the id is the credential."""
+    _enforce(
+        request, "dataset-read:",
+        int(os.getenv("DATASET_READ_RATE_PER_MIN", "120")),
+        int(os.getenv("DATASET_READ_GLOBAL_RATE_PER_MIN", "1200")),
+        trust_proxy_ip=False,
     )
 
 
