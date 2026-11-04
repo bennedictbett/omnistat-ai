@@ -14,14 +14,28 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 
 import pandas as pd
 
 from app.services.python_crosscheck import cross_check
-from app.services.r_runner import run_r
+from app.services.r_runner import CPU_SECONDS, run_r
 
-MAX_ROWS = 200_000
+MAX_ROWS = int(os.getenv("R_MAX_ROWS", "1000000"))
+
+# Bigger datasets legitimately take longer. Beyond 1 MB of CSV, each extra MB adds this
+# many seconds, up to a ceiling; the CPU limit is raised to match the wall-clock limit.
+TIMEOUT_SECONDS = float(os.getenv("R_TIMEOUT_SECONDS", "30"))
+TIMEOUT_PER_EXTRA_MB = float(os.getenv("R_TIMEOUT_PER_MB", "3"))
+TIMEOUT_MAX_SECONDS = float(os.getenv("R_TIMEOUT_MAX_SECONDS", "300"))
+
+
+def run_limits(csv_bytes: int) -> tuple[float, int]:
+    """(wall-clock timeout, CPU seconds) for an R job on a CSV of this size."""
+    extra_mb = max(0.0, csv_bytes / 1024**2 - 1)
+    timeout = min(TIMEOUT_MAX_SECONDS, TIMEOUT_SECONDS + TIMEOUT_PER_EXTRA_MB * extra_mb)
+    return timeout, max(CPU_SECONDS, int(timeout))
 
 
 class TemplateError(ValueError):
@@ -217,7 +231,8 @@ emit("ci_95", as.numeric(ct$conf.int))
 emit("n", length(x))
 emit("spearman_rho", unname(sp$estimate))
 emit("spearman_p_value", sp$p.value)
-plot(x, y, xlab = params$x, ylab = params$y, pch = 19, main = "Scatter with linear fit")
+k <- if (length(x) > 20000) round(seq(1, length(x), length.out = 20000)) else seq_along(x)  # plot at most 20,000 evenly spaced points
+plot(x[k], y[k], xlab = params$x, ylab = params$y, pch = 19, main = "Scatter with linear fit")
 abline(lm(y ~ x), lwd = 2)
 """,
     ),
@@ -407,9 +422,10 @@ if (length(preds) >= 2 && all(sapply(d[-1], is.numeric))) {
   vif <- tryCatch(diag(solve(cor(X[, -1, drop = FALSE]))), error = function(err) NULL)
   if (!is.null(vif)) emit("vif", data.frame(term = lab[-1], vif = unname(vif), row.names = NULL))
 }
+k <- if (n_used > 20000) round(seq(1, n_used, length.out = 20000)) else seq_len(n_used)  # plot at most 20,000 evenly spaced points
 par(mfrow = c(1, 2))
-plot(fitted(fit), e, xlab = "Fitted values", ylab = "Residuals", pch = 19, main = "Residuals vs fitted"); abline(h = 0, lty = 2)
-qqnorm(e, main = "Normal Q-Q of residuals"); qqline(e)
+plot(fitted(fit)[k], e[k], xlab = "Fitted values", ylab = "Residuals", pch = 19, main = "Residuals vs fitted"); abline(h = 0, lty = 2)
+qqnorm(e[k], main = "Normal Q-Q of residuals"); qqline(e[k])
 """,
     _REG_OPTIONAL,
     ),
@@ -420,7 +436,7 @@ qqnorm(e, main = "Normal Q-Q of residuals"); qqline(e)
 u <- sort(unique(d$y))
 if (length(u) != 2) stop(paste("Logistic regression needs an outcome with exactly 2 distinct values, found", length(u)))
 y01 <- as.integer(d$y == u[2]); d$y <- y01
-n1 <- sum(y01); n0 <- n_used - n1
+n1 <- as.numeric(sum(y01)); n0 <- n_used - n1   # numeric: n1 * n0 overflows 32-bit integers above ~92,000 balanced rows
 if (min(n1, n0) < 5) stop("Too few events or non-events (fewer than 5 of one kind)")
 w <- character(0)
 fit <- withCallingHandlers(glm(y ~ ., data = d, family = binomial()),
@@ -463,7 +479,9 @@ emit("coefficients", data.frame(term = lab, odds_ratio = exp(cf[, 1]), or_lwr = 
 emit("assumption_hosmer_lemeshow_p", hl_p)
 if (length(w)) emit("model_warnings", unique(w))
 o <- order(p, decreasing = TRUE); ys <- y01[o]
-plot(c(0, cumsum(1 - ys) / n0), c(0, cumsum(ys) / n1), type = "l", lwd = 2,
+fpr <- c(0, cumsum(1 - ys) / n0); tpr <- c(0, cumsum(ys) / n1)
+k <- if (length(fpr) > 20000) round(seq(1, length(fpr), length.out = 20000)) else seq_along(fpr)  # draw at most 20,000 evenly spaced points
+plot(fpr[k], tpr[k], type = "l", lwd = 2,
      xlab = "1 - Specificity", ylab = "Sensitivity", main = sprintf("ROC curve (AUC = %.3f)", auc))
 abline(0, 1, lty = 2, col = "grey60")
 """,
@@ -540,10 +558,13 @@ def prepare_test_data(test: str, variables: dict[str, str], df: pd.DataFrame) ->
 
 
 async def run_named_test(test: str, variables: dict[str, str], df: pd.DataFrame) -> dict:
-    csv = prepare_test_data(test, variables, df)
+    # Serialising a large dataset to CSV takes seconds; keep it off the event loop.
+    csv = await asyncio.to_thread(prepare_test_data, test, variables, df)
     spec = TEMPLATES[test]
 
-    result = await run_r(spec.code + _VERSION_PROBE, data_csv=csv, params=variables)
+    timeout, cpu_seconds = run_limits(len(csv))
+    result = await run_r(spec.code + _VERSION_PROBE, data_csv=csv, params=variables,
+                         timeout=timeout, cpu_seconds=cpu_seconds)
     out = result.to_dict()
     r_version = _pop_r_version(out)
     digest = hashlib.sha256(csv).hexdigest()
