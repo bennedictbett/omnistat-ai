@@ -223,6 +223,80 @@ the dashboard explicitly says the audit is unavailable and requests a fresh
 upload. Invalid audit versions or structures are reported rather than shown as
 clean. No raw values are logged by these checks.
 
+### Large Datasets (server-side store, API)
+
+The classic upload (`POST /api/analytics/upload`) returns every row to the browser
+and every analysis sends them all back, which cannot work for large files (a
+1,000,000-row, 9-column file is about 150 MB of JSON, browsers cap `localStorage` at
+about 5 MB, and Vercel limits proxied request bodies to 4.5 MB). The dataset store
+parses a file **once**, keeps it on the API server as a typed Parquet file, and
+lets analyses refer to it by id:
+
+```powershell
+# 1. Upload once. Returns a dataset_id, summaries, audit and a 100-row preview (about 14 KB, not the rows).
+curl.exe -s -F "file=@big.csv" http://127.0.0.1:8000/api/datasets
+# 2. Review, check and run by id instead of sending rows. Only the columns an analysis needs are read.
+curl.exe -s -H "X-API-Key: $env:OMNISTAT_API_KEY" -H "Content-Type: application/json" `
+  -d '{"test":"independent_t_test","variables":{"outcome":"bp","group":"arm"},"dataset_id":"<id>"}' `
+  http://127.0.0.1:8000/api/r/run
+# 3. Page through rows, or delete the dataset now.
+curl.exe -s "http://127.0.0.1:8000/api/datasets/<id>/rows?offset=0&limit=100"
+curl.exe -s -X DELETE http://127.0.0.1:8000/api/datasets/<id>
+```
+
+`/api/r/plan`, `/checks`, `/run` and `/bundle` accept either `data` (rows, as before)
+or `dataset_id`, never both. Results are the same as with inline rows.
+
+**What is stored, and for how long.** The full dataset is kept on the API server's
+disk (`OMNISTAT_DATA_DIR`, default a temporary folder). It is deleted after 24 hours
+without use (`DATASET_TTL_HOURS`; every read refreshes the clock), when you call
+`DELETE`, or by a sweep that runs every 30 minutes. Like the classic upload, the
+endpoint is public because the browser cannot hold an API key, so it is rate-limited
+per connecting address and bounded in size, rows and total storage; the 128-bit
+random id is what grants access to a dataset (it is not tied to a user), so treat ids
+like passwords. If storage is full, new uploads are refused (HTTP 507); datasets in
+use are never evicted. Do not enable this for data that must not be held on a shared
+server.
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `OMNISTAT_DATA_DIR` | temp folder | Where datasets are stored; use a persistent, private folder in production |
+| `DATASET_MAX_UPLOAD_MB` / `DATASET_MAX_EXCEL_MB` | 200 / 50 | File size limits (Excel is parsed in pure Python and needs far more memory per row) |
+| `DATASET_MAX_ROWS` / `DATASET_MAX_COLUMNS` | 1,000,000 / 1,000 | Rejected above this (HTTP 413) |
+| `DATASET_TTL_HOURS` | 24 | Hours of inactivity before deletion |
+| `DATASET_MAX_TOTAL_MB` / `DATASET_MAX_PER_CLIENT_MB` | 5000 / 1000 | Store-wide and per-address storage caps |
+| `DATASET_MAX_CONCURRENT_UPLOADS` | 1 | Parsing a large file is memory-hungry, so uploads queue (HTTP 503 if busy) |
+| `DATASET_UPLOAD_RATE_PER_MIN` | 6 | Per-address upload limit (`DATASET_READ_RATE_PER_MIN`, 120, for reads) |
+| `R_MAX_ROWS` | 1,000,000 | R analyses refuse more rows than this |
+| `R_TIMEOUT_SECONDS`, `R_TIMEOUT_PER_MB`, `R_TIMEOUT_MAX_SECONDS` | 30, 3, 300 | R wall-clock limit: 30 s plus 3 s per MB of CSV beyond the first, up to 300 s; the CPU limit is raised to match. Datasets under 1 MB keep the original limits |
+
+Put a request-size cap on your reverse proxy too (the upload guard only sees
+declared lengths; for Caddy, `request_body { max_size 250MB }` on `/api/datasets`).
+
+**Measured at 1,000,000 rows** (9 columns, 37 MB CSV, on an 8 GB Windows laptop with
+under 1 GB of free memory and R in Docker Desktop, so a slow case): upload and
+audit 17-18 s; the API process peaked at **484 MB**; a page of rows 0.1-0.4 s;
+Welch t-test, linear and logistic regression all completed (about 15-25 s, 40-50 s
+and 30-75 s end to end, including 10-15 s of container start-up here). The t-test
+statistic matched SciPy exactly (-137.336492). Linux servers start containers in
+about a second, so expect it to be quicker there.
+
+Changes this needed: the data audit is vectorised (3-4x faster, identical results,
+checked against the original implementation in `tests/test_data_audit_equivalence.py`),
+diagnostic plots draw at most 20,000 evenly spaced points (drawing 1,000,000 points
+took 61 of the 70 seconds for a linear regression), and a logistic-regression
+integer overflow was fixed: `n1 * n0` exceeded 2^31 above about 92,000 balanced rows,
+which turned the AUC into `NA`. Servers without `pyarrow` (such as the current Render
+build, which does not install `requirements.txt`) still start; the dataset endpoints
+answer HTTP 503 there.
+
+**Not done yet:** the web app still uses the classic upload, so large files do not
+work in the browser until the frontend is switched to `dataset_id` (charts, maps and
+summaries would use server-side aggregates or labelled samples, and Dataset Projects
+would decline files above 100,000 rows). Vercel's 60-second function limit also
+caps how long a proxied R analysis can run. DuckDB was not needed at this scale:
+Parquet plus pandas used under 500 MB for 1,000,000 rows.
+
 ### Dataset Projects (This Browser)
 
 Use **Projects** in the sidebar to keep several uploaded datasets on this device:
@@ -714,6 +788,9 @@ the browser reaches them through Next.js proxies.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/analytics/upload` | Upload CSV/Excel/SPSS/Stata; returns data, labels, audit and dashboard statistics |
+| POST | `/api/datasets` | Upload once into the server-side dataset store (large files); returns a `dataset_id`, summaries and a 100-row preview, not the rows |
+| GET | `/api/datasets/{id}`, `/api/datasets/{id}/rows?offset=&limit=` | Dataset summary; pages of rows (up to 1,000 at a time) |
+| DELETE | `/api/datasets/{id}` | Delete a stored dataset now |
 | POST | `/api/analytics/descriptive` | Descriptive statistics |
 | POST | `/api/analytics/normality` | Shapiro-Wilk normality test |
 | POST | `/api/analytics/survival` | Kaplan-Meier survival curve |
@@ -722,7 +799,7 @@ the browser reaches them through Next.js proxies.
 | GET | `/api/r/tests` | Available R procedures and their column roles |
 | POST | `/api/r/plan` | Prepare a reviewed analysis plan (no execution) |
 | POST | `/api/r/checks` | Pre-run assumption checks (no execution) |
-| POST | `/api/r/run` | Run an R procedure, optionally against a reviewed plan |
+| POST | `/api/r/run` | Run an R procedure (rows in `data`, or a stored `dataset_id`), optionally against a reviewed plan |
 | POST | `/api/r/bundle` | Build a reproducibility ZIP from a result |
 | GET/POST | `/api/math/operations`, `/api/math/run` | Symbolic and numeric math |
 | POST | `/api/voice/transcribe` | Speech to text for Jarvis |
@@ -739,7 +816,7 @@ Prioritised against the NexStat technical specification.
 
 ### Phase 1 remaining
 - [x] Stronger sandboxing: R and maths workers can run in containers with no network (`R_SANDBOX` / `MATH_SANDBOX=docker`); still to do: enable it by default in the hosted deployment (needs a worker host with Docker access)
-- [ ] Large datasets with Arrow/DuckDB (1 million rows on 8 GB RAM)
+- [ ] Large datasets (1 million rows on 8 GB RAM): server-side Parquet store, upload and R analyses by `dataset_id` are built and verified at 1,000,000 rows (API only); the web app still needs to use them (see "Large Datasets")
 - [ ] Offline desktop app (Electron or Tauri) with local AI models
 - [ ] Privacy tools: identifier detection, pseudonymisation, encryption at rest, roles
 
@@ -757,10 +834,11 @@ Prioritised against the NexStat technical specification.
 omnistat-ai/
 ├── app/
 │   ├── agents/                  # Jarvis agent and prompts
-│   ├── api/routes/              # analytics, agent, r_analysis, math, voice
-│   ├── security/                # API keys and rate limits
+│   ├── api/routes/              # analytics, datasets, agent, r_analysis, math, voice
+│   ├── security/                # API keys, rate limits, upload size guard
 │   ├── services/
 │   │   ├── analytics_service.py # Upload parsing and Python statistics
+│   │   ├── dataset_store.py     # Server-side Parquet store for large datasets
 │   │   ├── data_audit.py        # Upload data-quality audit
 │   │   ├── analysis_plan.py     # Reviewed analysis plans
 │   │   ├── assumption_checks.py # Pre-run diagnostics

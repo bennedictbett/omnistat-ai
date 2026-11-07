@@ -31,21 +31,17 @@ def _label_key(value) -> str:
     return str(value)
 
 
-def _read_statistical_file(content: bytes, name: str) -> tuple[pd.DataFrame, dict, dict]:
-    """Reads SPSS/Stata files, keeping stored codes; user-defined and extended missing codes become missing."""
+def _read_statistical_path(path: str, name: str) -> tuple[pd.DataFrame, dict, dict]:
+    """Reads an SPSS/Stata file from disk, keeping stored codes; user-defined and extended missing codes become missing."""
     import pyreadstat
 
     suffix = os.path.splitext(name)[1]
-    with tempfile.TemporaryDirectory() as folder:
-        path = os.path.join(folder, f"upload{suffix}")
-        with open(path, "wb") as handle:
-            handle.write(content)
-        reader = pyreadstat.read_dta if suffix == ".dta" else pyreadstat.read_sav
-        try:
-            df, meta = reader(path)
-        except Exception as e:
-            # pyreadstat raises its own exception types for corrupt or unsupported files.
-            raise ValueError("Unreadable SPSS or Stata file") from e
+    reader = pyreadstat.read_dta if suffix == ".dta" else pyreadstat.read_sav
+    try:
+        df, meta = reader(path)
+    except Exception as e:
+        # pyreadstat raises its own exception types for corrupt or unsupported files.
+        raise ValueError("Unreadable SPSS or Stata file") from e
     for column in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[column]):
             df[column] = df[column].map(lambda v: None if pd.isna(v) else v.isoformat())
@@ -58,6 +54,28 @@ def _read_statistical_file(content: bytes, name: str) -> tuple[pd.DataFrame, dic
         for c, labels in meta.variable_value_labels.items() if labels
     }
     return df, variable_labels, value_labels
+
+
+def _read_statistical_file(content: bytes, name: str) -> tuple[pd.DataFrame, dict, dict]:
+    suffix = os.path.splitext(name)[1]
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, f"upload{suffix}")
+        with open(path, "wb") as handle:
+            handle.write(content)
+        return _read_statistical_path(path, name)
+
+
+def read_dataset_file(path: str, name: str, max_rows: int | None = None) -> tuple[pd.DataFrame, dict, dict]:
+    """Read an uploaded file from disk. With `max_rows`, a CSV is read at most one row past
+    the limit, so an oversized file is rejected without loading all of it into memory."""
+    lower = name.lower()
+    if lower.endswith(".csv"):
+        # low_memory=False infers each column's type once, so a column never mixes chunk types.
+        nrows = None if max_rows is None else max_rows + 1
+        return pd.read_csv(path, low_memory=False, nrows=nrows), {}, {}
+    if lower.endswith((".sav", ".zsav", ".dta")):
+        return _read_statistical_path(path, lower)
+    return pd.read_excel(path), {}, {}
 
 
 class AnalyticsService:

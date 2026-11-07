@@ -37,10 +37,10 @@ class BundleResult(BaseModel):
     analysis_plan: AnalysisPlan | None = None
 
 
-def build_bundle(result: BundleResult, rows: list[dict]) -> bytes:
+def build_bundle(result: BundleResult, rows: "list[dict] | pd.DataFrame") -> bytes:
     if not result.ok or result.error or result.timed_out:
         raise BundleError("Only successful analyses can be exported")
-    df = pd.DataFrame(rows)
+    df = rows if isinstance(rows, pd.DataFrame) else pd.DataFrame(rows)
     csv = prepare_test_data(result.test, result.variables, df)
     digest = hashlib.sha256(csv).hexdigest()
     if digest != result.data_sha256:

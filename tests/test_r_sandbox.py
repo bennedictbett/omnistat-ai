@@ -156,3 +156,49 @@ def test_windows_timeout_kills_process_tree_and_never_hangs(monkeypatch):
 
     assert result.timed_out and not result.ok
     assert "taskkill" in calls
+
+
+def test_cpu_limit_can_be_raised_per_job(tmp_path, monkeypatch):
+    argv = r_runner._docker_command(tmp_path, "n", cpu_seconds=90)
+    assert "cpu=90:90" in argv
+    assert f"cpu={r_runner.CPU_SECONDS}:{r_runner.CPU_SECONDS}" in r_runner._docker_command(tmp_path, "n")
+
+    calls = []
+    resource = SimpleNamespace(
+        RLIMIT_CPU="cpu", RLIMIT_AS="as", RLIMIT_FSIZE="fsize",
+        setrlimit=lambda kind, limits: calls.append((kind, limits)),
+    )
+    monkeypatch.setattr(r_runner, "resource", resource)
+    r_runner._apply_limits(90)
+    assert calls[0] == ("cpu", (90, 90))
+
+
+def test_limits_grow_with_dataset_size_but_small_jobs_are_unchanged():
+    from app.services import r_templates
+
+    base = r_templates.TIMEOUT_SECONDS
+    assert r_templates.run_limits(500_000) == (base, max(r_runner.CPU_SECONDS, int(base)))
+    timeout, cpu = r_templates.run_limits(21 * 1024**2)  # 20 MB beyond the free 1 MB
+    assert timeout == base + 20 * r_templates.TIMEOUT_PER_EXTRA_MB
+    assert cpu == max(r_runner.CPU_SECONDS, int(timeout))
+    assert r_templates.run_limits(10**12)[0] == r_templates.TIMEOUT_MAX_SECONDS
+
+
+def test_named_test_passes_scaled_limits_to_the_runner(monkeypatch):
+    import pandas as pd
+    from app.services import r_templates
+
+    seen = {}
+
+    async def fake_run_r(code, data_csv=None, params=None, timeout=30.0, cpu_seconds=None):
+        seen.update(timeout=timeout, cpu_seconds=cpu_seconds, size=len(data_csv))
+        return r_runner.RResult(ok=False, error="stopped for the test")
+
+    monkeypatch.setattr(r_templates, "run_r", fake_run_r)
+    df = pd.DataFrame({"y": range(900_000), "g": ["a", "b", "c"] * 300_000})
+    out = asyncio.run(r_templates.run_named_test("independent_t_test", {"outcome": "y", "group": "g"}, df))
+
+    assert not out["ok"]
+    expected_timeout, expected_cpu = r_templates.run_limits(seen["size"])
+    assert seen["timeout"] == expected_timeout > r_templates.TIMEOUT_SECONDS
+    assert seen["cpu_seconds"] == expected_cpu
