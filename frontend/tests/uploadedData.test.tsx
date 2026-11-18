@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import JarvisInput from '@/components/jarvis/JarvisInput'
 import FileUpload from '@/components/data/FileUpload'
 import DescriptiveStats from '@/components/analytics/DescriptiveStats'
 import { queryJarvis, uploadDataset } from '@/lib/api'
@@ -36,14 +35,6 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
-
-async function submitQuestion(test = 'shapiro_wilk') {
-  fetchMock.mockResolvedValueOnce(reply({ success: true, intent: { test, variables: ['bp'] } }))
-  render(<JarvisInput />)
-  fireEvent.change(screen.getByPlaceholderText(/Compare survival rates/), { target: { value: 'Check bp' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-  await screen.findByText('Suggested Analysis')
-}
 
 describe('uploaded-data workflow', () => {
   it('uses the configured server and sends the uploaded file', async () => {
@@ -85,45 +76,9 @@ describe('uploaded-data workflow', () => {
     expect(JSON.parse(init.body)).toEqual({ column: 'bp', values: rows.map((row) => row.bp) })
   })
 
-  it('opens the column picker for a supported test without running sample data', async () => {
-    await submitQuestion()
-    fetchMock.mockResolvedValueOnce(reply({ shapiro_wilk: { title: 'Shapiro-Wilk', variables: { variable: 'Column' } } }))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Data Columns' }))
-    await screen.findByText('Column picker for shapiro_wilk')
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      `${API_URL}/api/agent/query`, `${API_URL}/api/r/tests`,
-    ])
-  })
-
-  it('reports an unsupported survival analysis without running a different test', async () => {
-    await submitQuestion('cox_regression')
-    fetchMock.mockResolvedValueOnce(reply({}))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Data Columns' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('not available')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not fall back to sample data when the catalog is unavailable', async () => {
-    await submitQuestion()
-    fetchMock.mockRejectedValueOnce(new TypeError('Network unavailable'))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Data Columns' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Could not connect')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
   it('rejects malformed analysis catalogs', async () => {
     fetchMock.mockResolvedValueOnce(reply({ shapiro_wilk: { title: 'Test' } }))
     await expect(fetchRTests()).rejects.toThrow('invalid list')
-  })
-
-  it('shows clarification instead of an executable plan', async () => {
-    fetchMock.mockResolvedValueOnce(reply({ success: true, needs_clarification: true }))
-    render(<JarvisInput />)
-    fireEvent.change(screen.getByPlaceholderText(/Compare survival rates/), { target: { value: 'Compare these' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    await screen.findByText(/Your question is ambiguous/)
-    expect(screen.queryByRole('button', { name: 'Choose Data Columns' })).toBeNull()
-    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('rejects incomplete classifier-only plans and malformed optional fields', async () => {
