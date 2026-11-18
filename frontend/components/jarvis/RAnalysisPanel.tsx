@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Play, AlertCircle, Upload, Plus, X } from 'lucide-react'
 import RegressionPlot from '@/components/analytics/RegressionPlot'
 import AssumptionChecks from '@/components/jarvis/AssumptionChecks'
@@ -36,9 +36,13 @@ interface Props {
   spec: RTestSpec
   /** Variable names suggested by the Jarvis agent (used only to pre-fill the pickers) */
   intentVariables: string[]
+  /** Exact role -> column choices proposed by Jarvis; ignored for columns not in the dataset */
+  initialMapping?: Record<string, string>
+  /** Prepare the plan review straight away (nothing runs until the user confirms) */
+  autoReview?: boolean
 }
 
-export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
+export default function RAnalysisPanel({ test, spec, intentVariables, initialMapping, autoReview = false }: Props) {
   const roles = useMemo(() => Object.keys(spec.variables), [spec])
   const optionalRoles = useMemo(() => new Set(spec.optional ?? []), [spec])
   const requiredRoles = useMemo(() => roles.filter((r) => !optionalRoles.has(r)), [roles, optionalRoles])
@@ -67,14 +71,23 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
     try {
       const d = loadUploadedData()
       setData(d)
-      if (d) setMapping(guessColumns(requiredRoles, intentVariables, d.columns))
+      if (d) {
+        const proposed = Object.entries(initialMapping ?? {})
+          .filter(([role, column]) => roles.includes(role) && d.columns.includes(column))
+        if (proposed.length) {
+          setMapping(Object.fromEntries(proposed))
+          setExtraRoles(proposed.map(([role]) => role).filter((role) => optionalRoles.has(role)))
+        } else {
+          setMapping(guessColumns(requiredRoles, intentVariables, d.columns))
+        }
+      }
     } catch (e) {
       setData(null)
       setError(e instanceof RApiError ? e.message : 'Could not read the uploaded data. Upload your file again.')
     } finally {
       setLoaded(true)
     }
-  }, [test, requiredRoles, intentVariables])
+  }, [test, roles, optionalRoles, requiredRoles, intentVariables, initialMapping])
 
   const activeRoles = [...requiredRoles, ...extraRoles]
   const chosen = activeRoles.map((r) => mapping[r]).filter(Boolean)
@@ -125,6 +138,15 @@ export default function RAnalysisPanel({ test, spec, intentVariables }: Props) {
       setRunning(false)
     }
   }
+
+  // Jarvis-prepared analyses open the plan review once; executing still needs the user's confirmation.
+  const autoReviewed = useRef(false)
+  useEffect(() => {
+    if (!autoReview || autoReviewed.current || !loaded || !data || !needsReview || plan || running) return
+    if (!allChosen || hasDuplicate) return
+    autoReviewed.current = true
+    void handleRun()
+  })
 
   if (!loaded) return null
 

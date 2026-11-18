@@ -17,15 +17,20 @@ OmniStat closes both gaps: it understands what you want, runs the analysis, and 
 ## What's Built
 
 ### Jarvis AI Agent and Test Wizard
-Type a research question in plain English (or speak it). Jarvis identifies the
-statistical test and suggests columns; you confirm the columns before anything
-runs. The **Test Wizard** reaches the same tests by answering a few questions.
+Chat with Jarvis in plain English (or speak). It answers greetings and statistics
+questions, and prepares analyses on your uploaded data. The **Test Wizard**
+reaches the same tests by answering a few questions.
 
 ```
-"Compare blood pressure between treatment and control"
-→ test: independent_t_test (Welch)
-→ choose columns → review plan and assumption checks → run in R
+You:    hi
+Jarvis: Hi! How can I help with your data today?
+You:    run a one-way ANOVA of bp by site
+Jarvis: I prepared a one-way ANOVA of bp by site; review the plan and confirm to run it.
+        → plan review with assumption checks opens → Confirm and Run in R
+You:    run descriptive statistics
+        → table of n, mean, SD, median, quartiles, min and max for numeric columns
 ```
+See [Jarvis Chat](#jarvis-chat) for privacy and limits.
 
 ### Data
 - Upload **CSV, Excel, SPSS (`.sav`/`.zsav`) or Stata (`.dta`)**, keeping
@@ -140,6 +145,40 @@ npm run dev
 ```
 
 Open `http://localhost:3000`
+
+### Jarvis Chat
+
+The Jarvis tab is a conversation. Each message sends the recent chat history
+(up to 12 messages) to `POST /api/agent/chat`, which asks a Groq model to reply in
+a fixed JSON format with a message and, optionally, one action:
+
+| Action | What happens |
+|--------|--------------|
+| `run_analysis` | The analysis panel opens with Jarvis's columns. For reviewed procedures the plan review and assumption checks open automatically; **nothing runs until you select Confirm and Run in R**. Other R procedures need one click on **Run in R**. |
+| `descriptive` | Descriptive statistics for the chosen numeric columns (up to 10) run directly using the existing descriptive endpoint. |
+| `choose_test` | When the request is ambiguous, Jarvis offers up to four supported tests as buttons. |
+
+Safety rules:
+- **The server validates every action** against the real list of R procedures and
+  the dataset's columns. Unknown tests, roles or columns are rejected with an
+  explicit message, never silently replaced; columns that don't match are left
+  for you to choose.
+- **Jarvis never sees data values or results.** With the setting on (default), only
+  column names, types, distinct-value counts and variable labels are sent. Turn
+  off **Share column names and types** to send none; Jarvis then can't pick columns.
+- **Jarvis cannot state statistics.** Results come from R and the rule-based
+  summaries. If a reply contains decimals, percentages or numbers above 10 that
+  aren't method constants (0.05, 95%) or taken from your own messages, the
+  server replaces it with a notice.
+- Messages go to an external AI service (Groq). Do not type patient names or
+  identifiers. Conversations are not stored.
+
+Configuration: the backend needs `GROQ_API_KEY` (and optionally
+`GROQ_INTENT_MODELS`). Without it, Jarvis shows an explicit "not configured"
+message and the Test Wizard still works. The chat endpoint is public, like
+uploads, and rate limited per client address (`AGENT_CHAT_RATE_PER_MIN`, default
+20; `AGENT_CHAT_GLOBAL_RATE_PER_MIN`, default 200). The older single-question
+endpoint `POST /api/agent/query` remains for compatibility.
 
 ### Backend Selection and Uploaded-Data Analyses
 
@@ -795,7 +834,8 @@ the browser reaches them through Next.js proxies.
 | POST | `/api/analytics/normality` | Shapiro-Wilk normality test |
 | POST | `/api/analytics/survival` | Kaplan-Meier survival curve |
 | POST | `/api/analytics/compare-groups`, `/compare-paired`, `/correlation`, `/regression`, `/categorical`, `/power` | Python statistics endpoints |
-| POST | `/api/agent/query` | Natural language → statistical intent |
+| POST | `/api/agent/chat` | Jarvis conversation; returns a reply and an optional validated action |
+| POST | `/api/agent/query` | Natural language → statistical intent (legacy single question) |
 | GET | `/api/r/tests` | Available R procedures and their column roles |
 | POST | `/api/r/plan` | Prepare a reviewed analysis plan (no execution) |
 | POST | `/api/r/checks` | Pre-run assumption checks (no execution) |
