@@ -272,3 +272,31 @@ it('reports unavailable or malformed checks explicitly', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Review Analysis Plan' }))
   expect((await screen.findByRole('alert')).textContent).toContain('Could not run assumption checks')
 })
+
+it('auto-prepares the plan review from Jarvis columns but never runs without confirmation', async () => {
+  localStorage.setItem('omnistat_data', JSON.stringify({
+    columns: ['bp', 'arm', 'other'], numeric_cols: ['bp', 'other'],
+    full_data: rows.map((row, i) => ({ ...row, arm: i < 5 ? 'A' : 'B', other: 2 * row.bp })),
+  }))
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => plan })
+  render(<RAnalysisPanel test="independent_t_test" spec={tSpec} intentVariables={[]}
+    initialMapping={{ outcome: 'other', group: 'arm' }} autoReview />)
+  await screen.findByRole('region', { name: 'Analysis plan review' })
+  expect(fetchMock).toHaveBeenCalledOnce()
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/r/plan')
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).variables).toEqual({ outcome: 'other', group: 'arm' })
+  expect(screen.getByRole('button', { name: 'Confirm and Run in R' })).toBeTruthy()
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  expect(fetchMock).toHaveBeenCalledOnce()
+})
+
+it('keeps only proposed columns that exist and waits for the user to complete the rest', async () => {
+  localStorage.setItem('omnistat_data', JSON.stringify({ columns: ['bp', 'arm'], numeric_cols: ['bp'], full_data: rows.map((r, i) => ({ ...r, arm: i < 5 ? 'A' : 'B' })) }))
+  render(<RAnalysisPanel test="independent_t_test" spec={tSpec} intentVariables={[]}
+    initialMapping={{ outcome: 'weight', group: 'arm' }} autoReview />)
+  await screen.findByRole('button', { name: 'Review Analysis Plan' })
+  const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
+  expect(selects[0].value).toBe('')
+  expect(selects[1].value).toBe('arm')
+  expect(fetchMock).not.toHaveBeenCalled()
+})
