@@ -3,13 +3,17 @@ Agent route — kept for backwards compatibility with the frontend's useJarvis h
 All logic lives in AnalystAgent; this is a thin wrapper.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app.agents.analyst_agent import AnalystAgent
+from app.agents.chat_agent import ChatAgent, ChatRequest, JarvisUnavailable
+from app.security.rate_limit import rate_limit_agent_chat
 
 router = APIRouter()
 agent  = AnalystAgent()
+chat_agent = ChatAgent()
 
 
 class QueryRequest(BaseModel):
@@ -58,3 +62,17 @@ async def query_agent(request: QueryRequest):
     }
     """
     return await agent.process(request.query, request.context)
+
+
+@router.post("/chat", dependencies=[Depends(rate_limit_agent_chat)])
+async def chat_with_jarvis(request: ChatRequest):
+    """
+    Conversational Jarvis. Receives the chat history and the dataset's column names
+    and types (never values). Returns a reply and, optionally, a validated action:
+    run_analysis (test + role->column), descriptive (numeric columns) or choose_test.
+    Nothing is executed here; the browser confirms before running.
+    """
+    try:
+        return await run_in_threadpool(chat_agent.chat, request)
+    except JarvisUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
