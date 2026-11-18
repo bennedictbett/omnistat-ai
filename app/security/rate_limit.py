@@ -112,6 +112,16 @@ async def rate_limit_dataset_read(request: Request) -> None:
     )
 
 
+async def rate_limit_agent_chat(request: Request) -> None:
+    """Public: the browser chats directly. Each message costs an AI call, so limit it."""
+    _enforce(
+        request, "agent-chat:",
+        int(os.getenv("AGENT_CHAT_RATE_PER_MIN", "20")),
+        int(os.getenv("AGENT_CHAT_GLOBAL_RATE_PER_MIN", "200")),
+        trust_proxy_ip=False,
+    )
+
+
 async def rate_limit_voice(request: Request, key_id: str = Depends(require_api_key)) -> None:
     """Each transcription costs money on Groq, so this is the tightest of the three."""
     _enforce(
